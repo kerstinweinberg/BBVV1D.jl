@@ -43,10 +43,7 @@ struct GlobalStorage
     velocity::Vector{Float64}
     velocity_half::Vector{Float64}
     acceleration::Vector{Float64}
-    # bond_failure::Vector{Int}
-    # damage::Vector{Float64}
     b_int::Vector{Float64}
-    # n_active_family_members::Vector{Int}
 end
 
 
@@ -74,7 +71,6 @@ function init_simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Vel
 
     # simulation parameters
     bonds, n_bonds, n_family_members, init_dists, hood_range = find_bonds(pc, mat.δ)
-    @assert hood_range == find_hood_range(n_family_members, pc.n_points)
     cells = get_cells(pc.n_points)
     sp = SimulationParameters(mat, pc, cells, n_bonds, bonds, init_dists, n_family_members,
                               hood_range, bcs, n_timesteps, export_freq, export_path)
@@ -176,16 +172,6 @@ function export_vtk(sp::SimulationParameters, gs::GlobalStorage, timestep::Int, 
         vtk["Time", VTKFieldData()] = time
     end
     return nothing
-end
-
-function find_hood_range(n_family_members::Vector{Int}, n_points::Int)
-    hood_range = fill(0:0, n_points)
-    cbond = 1
-    for i in 1:n_points
-        hood_range[i] = cbond:(cbond + n_family_members[i] - 1)
-        cbond += n_family_members[i]
-    end
-    return hood_range
 end
 
 function compute_forcedensity!(gs::GlobalStorage, sp::SimulationParameters)
