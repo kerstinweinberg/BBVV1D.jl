@@ -1,0 +1,7 @@
+name = "BBVV1D"
+uuid = "301be7c6-8d1a-4696-95bf-87aa5c26a29f"
+authors = ["Kai Partmann <kai.partmann@gmail.com> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.7"
