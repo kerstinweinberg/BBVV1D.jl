@@ -38,7 +38,6 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
     walltime = @elapsed begin
         print("initialization...")
 
-        # simulation parameters
         neighbor, initial_distance, bond_ids_of_point = find_bonds(pc, mat.δ)
         cells = get_cells(pc.n_points)
 
