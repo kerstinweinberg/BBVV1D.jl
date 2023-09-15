@@ -25,9 +25,10 @@ end
 ##--
 simname = "bbvv1D"
 l = 1.0
-Δx = l/1000
+Δx = l/100000
 v0 = 10
 T = 100 * 4.922483834177524e-6
 nt = 1000
-@time bbvv(simname, l, Δx, v0, T, nt)
-# with @btime: 238.600 ms (750902 allocations: 39.90 MiB)
+@btime bbvv(simname, l, Δx, v0, T, nt)
+# with 1000 points & @btime: 238.600 ms (750902 allocations: 39.90 MiB)
+# with 1000000 points & @threads @btime: 32.602 s (70797233 allocations: 1.69 GiB)
