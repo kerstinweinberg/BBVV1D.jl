@@ -24,9 +24,17 @@ struct BondBasedMaterial
     εc::Float64
 end
 
-struct VelocityBC
+mutable struct VelocityBC
     fun::Function
-    point_id_set::Vector{Int}
+    point_id_set::Set{Int}
+    value::Vector{Float64}
+    function VelocityBC(fun::Function, point_id_set::Set{Int})
+        new(fun, point_id_set, Vector{Float64}())
+    end
+end
+
+function VelocityBC(fun::Function, point_id_set::AbstractVector{T}) where {T <: Integer}
+    return VelocityBC(fun, Set(point_id_set))
 end
 
 """
@@ -52,34 +60,32 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
         print("time loop...")
 
         Δt = calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
+        for bc in bcs
+            init_bc!(bc, n_timesteps, Δt)
+        end
 
         export_vtk(position, displacement, cells, export_path, 0, 0)
 
         for timestep in 1:n_timesteps
             time = timestep * Δt
 
-            # update of velocity_half
-            for i in 1:pc.n_points
+            Threads.@threads for i in 1:pc.n_points
+                # update of velocity_half
                 velocity_half[i] = velocity[i] + acceleration[i] * 0.5Δt
-            end
 
-            # apply the boundary conditions
-            for bc in bcs
-                value = bc.fun(time)
-                @inbounds @simd for i in bc.point_id_set
-                    velocity_half[i] = value
+                # apply the boundary conditions
+                for bc in bcs
+                    if i in bc.point_id_set
+                        velocity_half[i] = bc.value[timestep]
+                    end
                 end
-            end
 
-            # update of displacement and position
-            for i in 1:pc.n_points
+                # update of displacement and position
                 displacement[i] += velocity_half[i] * Δt
                 position[i] += velocity_half[i] * Δt
-            end
 
-            # compute the internal force density b_int
-            b_int .= 0
-            for i in 1:pc.n_points
+                # compute the internal force density b_int
+                b_int[i] = 0
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
                     L = initial_distance[current_bond]
@@ -88,10 +94,8 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                     ε = (l - L) / L
                     b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
                 end
-            end
 
-            # solve the equation of motion
-            for i in 1:pc.n_points
+                # solve the equation of motion
                 acceleration[i] = b_int[i] / mat.rho
                 velocity[i] = velocity_half[i] + acceleration[i] * 0.5Δt
             end
@@ -153,6 +157,18 @@ function calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_dist
 end
 
 get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
+
+function init_bc!(bc::VelocityBC, n_timesteps::Int, Δt::Float64)
+    bc.value = [bc.fun(t) for t in Δt:Δt:(n_timesteps * Δt)]
+    return nothing
+end
+
+function apply_velocity_bc!(velocity_half::Vector{Int}, bc::VelocityBC, i::Int, t::Int)
+    if i in bc.point_id_set
+        velocity_half[i] = bc.value[t]
+    end
+    return nothing
+end
 
 function export_vtk(position, displacement, cells, export_path, timestep, time)
     filename = joinpath(export_path, @sprintf("timestep_%04d", timestep))
