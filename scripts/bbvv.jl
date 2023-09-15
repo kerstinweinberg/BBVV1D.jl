@@ -30,3 +30,4 @@ v0 = 10
 T = 100 * 4.922483834177524e-6
 nt = 1000
 @time bbvv(simname, l, Δx, v0, T, nt)
+# with @btime: 238.600 ms (750902 allocations: 39.90 MiB)
