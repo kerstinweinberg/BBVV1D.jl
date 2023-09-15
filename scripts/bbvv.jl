@@ -18,8 +18,8 @@ function bbvv(simname, l, Δx, vmax, T, nt)
     path = joinpath(RESPATH, simname)
     ispath(path) && rm(path; recursive=true, force=true)
     !ispath(path) && mkpath(path) # create the path if it does not exist
-    sp, gs = simulation(pc, mat, bcs; n_timesteps=nt, export_freq=10, export_path=path)
-    return sp, gs
+    simulation(pc, mat, bcs; n_timesteps=nt, export_freq=10, export_path=path)
+    return nothing
 end
 
 ##--
@@ -29,4 +29,5 @@ l = 1.0
 v0 = 10
 T = 100 * 4.922483834177524e-6
 nt = 1000
-@time sp, gs = bbvv(simname, l, Δx, v0, T, nt)
+@time bbvv(simname, l, Δx, v0, T, nt)
+# with @btime: 238.600 ms (750902 allocations: 39.90 MiB)
