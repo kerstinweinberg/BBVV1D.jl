@@ -69,7 +69,7 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
         for timestep in 1:n_timesteps
             time = timestep * Δt
 
-            Threads.@threads for i in 1:pc.n_points
+            for i in 1:pc.n_points
                 # update of velocity_half
                 velocity_half[i] = velocity[i] + acceleration[i] * 0.5Δt
 
