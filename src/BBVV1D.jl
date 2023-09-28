@@ -46,7 +46,7 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
     walltime = @elapsed begin
         print("initialization...")
 
-        neighbor, initial_distance, bond_ids_of_point = find_bonds(pc, mat.δ)
+        neighbor, initial_distance, bond_ids_of_point = find_bonds(pc.position, mat.δ)
         cells = get_cells(pc.n_points)
 
         position = copy(pc.position)
@@ -118,16 +118,16 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
     return nothing
 end
 
-function find_bonds(pc::PointCloud, δ::Float64)
+function find_bonds(position::Vector{Float64}, δ::Float64)
     neighbor = Vector{Int}()
     initial_distance = Vector{Float64}()
-    bond_ids_of_point = fill(0:0, pc.n_points)
+    bond_ids_of_point = fill(0:0, length(position))
     bond_counter = 0
-    for i in 1:pc.n_points
+    for i in eachindex(position)
         bond_ids_of_point_start = bond_counter + 1
-        for j in 1:pc.n_points
+        for j in eachindex(position)
             if i !== j
-                L = abs(pc.position[j] - pc.position[i])
+                L = abs(position[j] - position[i])
                 if L <= δ
                     bond_counter += 1
                     push!(neighbor, j)
@@ -143,7 +143,7 @@ end
 
 function calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
     timesteps = fill(typemax(Float64), pc.n_points)
-    for i in 1:pc.n_points
+    for i in eachindex(pc.position)
         dtsum = 0.0
         for current_bond in bond_ids_of_point[i]
             j = neighbor[current_bond]
