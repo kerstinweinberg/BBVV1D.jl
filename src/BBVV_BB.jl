@@ -1,8 +1,8 @@
-# Kai
 
-using Printf, WriteVTK
 
-export PointCloud, BondBasedMaterial, VelocityBC, simulation, read_vtk
+using Printf, WriteVTK 
+
+export PointCloud, BondBasedMaterial, VelocityBC, simulation
 
 struct PointCloud
     n_points::Int
@@ -13,13 +13,16 @@ end
 function PointCloud(lx::Real, Δx::Real)
     gridx = range(; start = Δx / 2, stop = lx - Δx / 2, step = Δx)
     n_points = length(gridx)
-    volume = fill(Δx, n_points)
+    volume = fill(Δx, n_points)  # Laenge * A=1
     return PointCloud(n_points, gridx, volume)
 end
 
 struct BondBasedMaterial
     δ::Float64
     bc::Float64
+    bbc::Float64
+    ccc::Float64
+    E::Float64
     rho::Float64
     εc::Float64
 end
@@ -82,11 +85,9 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
             for i in 1:pc.n_points
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
-                    L = initial_distance[current_bond]
-                    Δxij = position[j] - position[i]
-                    l = abs(Δxij)
-                    ε = (l - L) / L
-                    b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
+                    ΔXij = initial_distance[current_bond]
+                    Δuij = displacement[j] - displacement[i]
+                    b_int[i] += mat.E * mat.bbc * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
@@ -157,13 +158,10 @@ get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
 function export_vtk(position, displacement, cells, export_path, timestep, time)
     filename = joinpath(export_path, @sprintf("timestep_%04d", timestep))
     vtk_grid(filename, position, cells) do vtk
-        vtk["displacement", VTKPointData()] = displacement
-        vtk["time", VTKFieldData()] = time
+        vtk["Displacement", VTKPointData()] = displacement
+        vtk["Time", VTKFieldData()] = time
     end
     return nothing
 end
-
-include("VtkReader.jl")
-using .VtkReader
 
 

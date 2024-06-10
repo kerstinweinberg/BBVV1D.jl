@@ -1,8 +1,8 @@
-# Kai
 
-using Printf, WriteVTK
 
-export PointCloud, BondBasedMaterial, VelocityBC, simulation, read_vtk
+using Printf, WriteVTK 
+
+export PointCloud, BondBasedMaterial, VelocityBC, simulation
 
 struct PointCloud
     n_points::Int
@@ -20,6 +20,9 @@ end
 struct BondBasedMaterial
     δ::Float64
     bc::Float64
+    bbc::Float64
+    ccc::Float64
+    E::Float64
     rho::Float64
     εc::Float64
 end
@@ -77,20 +80,31 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                 position[i] += velocity_half[i] * Δt
             end
 
-            # compute the internal force density b_int
+            # compute the averaged strain barepsilon at i
+            barepsilon .= 0
+            for i in 1:pc.n_points
+                for current_bond in bond_ids_of_point[i]
+                    j = neighbor[current_bond]
+                    ΔXij = initial_distance[current_bond]
+                    Δuij = displacement[j] - displacement[i]
+                    barepsilon[i] += mat.ccc * Δuij * ΔXij * pc.volume[j] 
+                end
+            end 
+
+            # Spannung
+            barsigma .= mat.E*barepsilon 
+
+             # compute the internal force density b_int
             b_int .= 0
             for i in 1:pc.n_points
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
-                    L = initial_distance[current_bond]
-                    Δxij = position[j] - position[i]
-                    l = abs(Δxij)
-                    ε = (l - L) / L
-                    b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
+                    ΔXij = initial_distance[current_bond]
+                    epsij = barepsilon[j] + barepsilon[i]
+                    b_int[i] += mat.E * mat.ccc * epsij * ΔXij * pc.volume[j] 
                 end
             end
-
-            # solve the equation of motion
+ # solve the equation of motion
             for i in 1:pc.n_points
                 acceleration[i] = b_int[i] / mat.rho
                 velocity[i] = velocity_half[i] + acceleration[i] * 0.5Δt
@@ -157,13 +171,10 @@ get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
 function export_vtk(position, displacement, cells, export_path, timestep, time)
     filename = joinpath(export_path, @sprintf("timestep_%04d", timestep))
     vtk_grid(filename, position, cells) do vtk
-        vtk["displacement", VTKPointData()] = displacement
-        vtk["time", VTKFieldData()] = time
+        vtk["Displacement", VTKPointData()] = displacement
+        vtk["Time", VTKFieldData()] = time
     end
     return nothing
 end
-
-include("VtkReader.jl")
-using .VtkReader
 
 
