@@ -20,8 +20,8 @@ end
 struct BondBasedMaterial
     δ::Float64
     bc::Float64
-    bbc::Float64
-    ccc::Float64
+    bbconst::Float64
+    ccconst::Float64
     E::Float64
     rho::Float64
     εc::Float64
