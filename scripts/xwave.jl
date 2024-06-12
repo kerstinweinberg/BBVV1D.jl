@@ -4,16 +4,20 @@ function xwave(l, N, T, vmax, path)
     Δx = l / N
     pc = PointCloud(l, Δx)
     δ = 3.015Δx
-    E = 2.1e9
-    nu = 0.25
-    bc = 18 * E / (3 * (1 - 2 * nu)) / (π * δ^2)
-    rho = 8000.0
+    E = 1000e6     # Polyamid, PE, PVC etc
+    rho = 1000.0   # ergibt cL=1000 m/sec
+    #
+    bbconst = 2/(δ^2)
+    bc = E*bbconst
+    ccconst = 3/(2*δ^3)
     εc = 0.01
-    mat = BondBasedMaterial(δ, bc, rho, εc)
+    mat = BondBasedMaterial(δ, bc, bbconst, ccconst, E, rho, εc)
+    #
     set_left = findall(p -> p ≤ Δx, pc.position)
     vwave(t) = t < T ? vmax * sin(2π/T * t) : 0
     bc_left = VelocityBC(vwave, set_left)
     bcs = [bc_left]
+    #
     simulation(pc, mat, bcs; n_timesteps=1000, export_freq=10, export_path=path)
     return nothing
 end
@@ -103,7 +107,7 @@ function main(N::Int=1000)
         process_each_export(find_wave_position, vtk_path)
         results = readdlm(wave_position_data_file, ',', Float64)
         t, x̂, û = results[:,1], results[:,2], results[:,3]
-        c_0 = sqrt(210e9 / 7850.0)
+        c_0 = 1000
         c_w = calc_velocity(t, x̂, û)
         Δc = c_w - c_0
         Δcp = 100 * Δc / c_0
