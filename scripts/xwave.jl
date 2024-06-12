@@ -70,7 +70,7 @@ function calc_velocity(t, x_w, u_w)
     return v
 end
 
-function main(N::Int=1000)
+function main(N::Int=10000)
 
     # setup
     root = joinpath(@__DIR__, "..", "results", "xwave_1D_v1")
