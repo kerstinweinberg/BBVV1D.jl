@@ -1,4 +1,4 @@
-# Kai
+# Kai's original file
 
 using Printf, WriteVTK
 
@@ -20,6 +20,9 @@ end
 struct BondBasedMaterial
     δ::Float64
     bc::Float64
+    bbconst::Float64
+    ccconst::Float64
+    E::Float64
     rho::Float64
     εc::Float64
 end
@@ -87,6 +90,9 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                     l = abs(Δxij)
                     ε = (l - L) / L
                     b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
+                    ΔXij = initial_distance[current_bond]
+                    Δuij = displacement[j] - displacement[i]
+                    #b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
