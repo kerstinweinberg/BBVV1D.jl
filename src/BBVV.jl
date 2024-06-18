@@ -89,10 +89,10 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                     Δxij = position[j] - position[i]
                     l = abs(Δxij)
                     ε = (l - L) / L
-                    b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
+                    #b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
                     ΔXij = initial_distance[current_bond]
                     Δuij = displacement[j] - displacement[i]
-                    #b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
+                    b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 

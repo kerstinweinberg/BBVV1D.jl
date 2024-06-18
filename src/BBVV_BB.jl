@@ -1,8 +1,8 @@
+# reference to original file
 
+using Printf, WriteVTK
 
-using Printf, WriteVTK 
-
-export PointCloud, BondBasedMaterial, VelocityBC, simulation
+export PointCloud, BondBasedMaterial, VelocityBC, simulation, read_vtk
 
 struct PointCloud
     n_points::Int
@@ -13,7 +13,7 @@ end
 function PointCloud(lx::Real, Δx::Real)
     gridx = range(; start = Δx / 2, stop = lx - Δx / 2, step = Δx)
     n_points = length(gridx)
-    volume = fill(Δx, n_points)  # Laenge * A=1
+    volume = fill(Δx, n_points)
     return PointCloud(n_points, gridx, volume)
 end
 
@@ -87,7 +87,7 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                     j = neighbor[current_bond]
                     ΔXij = initial_distance[current_bond]
                     Δuij = displacement[j] - displacement[i]
-                    b_int[i] += mat.E * mat.bbc * Δuij / ΔXij * pc.volume[j]  
+                    b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
@@ -158,10 +158,13 @@ get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
 function export_vtk(position, displacement, cells, export_path, timestep, time)
     filename = joinpath(export_path, @sprintf("timestep_%04d", timestep))
     vtk_grid(filename, position, cells) do vtk
-        vtk["Displacement", VTKPointData()] = displacement
-        vtk["Time", VTKFieldData()] = time
+        vtk["displacement", VTKPointData()] = displacement
+        vtk["time", VTKFieldData()] = time
     end
     return nothing
 end
+
+include("VtkReader.jl")
+using .VtkReader
 
 
