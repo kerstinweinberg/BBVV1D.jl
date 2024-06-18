@@ -11,10 +11,12 @@ function main(N::Int=1000)
     wave_speed_summary_file = joinpath(post_path, "wavespeed_summary.txt")
     all_wave_speed_summary_file = joinpath(root, "wavespeed_summary.txt")
     
-    # Modell
+    # Aufbau Modell und Welle
+    printstyled("\n--- PREPROCESSING ---\n", color=:blue, bold=true)
     laenge = 1.0          # Stablaenge [m]
     ΔX = laenge / N
     T, vmax = 5.0e-5, 2.0 # Wellenpuls
+    printstyled(@sprintf("Welle mit Amplitude %6.2f m/s fuer T = %6.2f musec\n", vmax,T*1e+6);color=:blue, bold=true)
 
     δ = 3.015ΔX
     E = 1000e6     # Polyamid, PE, PVC etc
@@ -25,17 +27,18 @@ function main(N::Int=1000)
     ccconst = 3/(2*δ^3)
     εc = 0.01
     mat = BondBasedMaterial(δ, bc, bbconst, ccconst, E, rho, εc)
+    #    @show E,bbconst, ccconst
  
     rm(root; recursive=true, force=true)
     mkpath(vtk_path)
     mkpath(post_path)
 
-    printstyled("--- XWAVE WITH N=$(N) ---\n", bold=true, color=:blue)
+    printstyled("\n--- XWAVE WITH N=$(N) ---\n", bold=true, color=:blue)
     printstyled(@sprintf(" E = %8.2f MPa\n", (E*1e-6));color=:blue, bold=true)
     printstyled(@sprintf(" ρ = %8.2f g/cm^3\n\n", rho);color=:blue, bold=true)
     @time xwave(laenge, N, T, vmax, mat, vtk_path)
 
-    # postprocessing
+    # Auswertung Geschwindigkeit
     printstyled("\n--- POSTPROCESSING ---\n", color=:blue, bold=true)
     function find_wave_position(r0, r, id)
         t = first(r[:time])
@@ -131,14 +134,18 @@ function calc_velocity(t, x_w, u_w)
     end
     n = length(t)
     @assert n == length(x_w)
-#    t̄ = sum(t) / n
-#    x̄ = sum(x_w) / n
-#    v = sum((t .- t̄) .* (x_w .- x̄)) / sum((t .- t̄) .^ 2)
-# print(u_0)
     t̄ = sum(t) / n
     x̄ = sum(x_w) / n
     v = sum((t .- t̄) .* (x_w .- x̄)) / sum((t .- t̄) .^ 2)
+# print(u_0)
 
+    t̄ = sum(t) / n
+    x̄ = sum(x_w) / n
+    v1 = x̄/ t̄
+ #    @show  x_w
+ #    @show  x̄   
+ #    @show  t̄   
+     @show  v1   
     return v
 end
 

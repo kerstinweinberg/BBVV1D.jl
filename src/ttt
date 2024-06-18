@@ -1,0 +1,26 @@
+            # compute the averaged strain barepsilon at i
+            barepsilon .= 0
+            for i in 1:pc.n_points
+                for current_bond in bond_ids_of_point[i]
+                    j = neighbor[current_bond]
+                    ΔXij = initial_distance[current_bond]
+                    Δuij = displacement[j] - displacement[i]
+                    barepsilon[i] += mat.ccc * Δuij * ΔXij * pc.volume[j] 
+                end
+            end 
+
+            # Spannung
+            barsigma .= mat.E*barepsilon 
+
+             # compute the internal force density b_int
+            b_int .= 0
+            for i in 1:pc.n_points
+                for current_bond in bond_ids_of_point[i]
+                    j = neighbor[current_bond]
+                    ΔXij = initial_distance[current_bond]
+                    epsij = barepsilon[j] + barepsilon[i]
+                    b_int[i] += mat.E * mat.ccc * epsij * ΔXij * pc.volume[j] 
+                end
+            end
+ # solve the equation of motion
+ 

@@ -49,8 +49,6 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
         velocity = zeros(pc.n_points)
         velocity_half = zeros(pc.n_points)
         acceleration = zeros(pc.n_points)
-        barepsilon = zeros(pc.n_points)
-        barsigma = zeros(pc.n_points)
         b_int = zeros(pc.n_points)
 
         println("\r✔ initialization   ")
@@ -82,39 +80,19 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                 position[i] += velocity_half[i] * Δt
             end
 
-            # compute the averaged strain barepsilon at i
-            barepsilon .= 0
-            for i in 1:pc.n_points
-                for current_bond in bond_ids_of_point[i]
-                    j = neighbor[current_bond]
-                    ΔXij = initial_distance[current_bond]
-                    Δuij = displacement[j] - displacement[i]
-                    barepsilon[i] += mat.ccconst * Δuij * ΔXij * pc.volume[j] 
-                end
-            end 
-
-            # Spannung
-            barsigma .= mat.E*barepsilon 
-
-             # compute the internal force density b_int
+            # compute the internal force density b_int
             b_int .= 0
             for i in 1:pc.n_points
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
-                    ΔXij = initial_distance[current_bond]
-                    epsij = barepsilon[j] + barepsilon[i]
-                    b_int[i] += mat.E * mat.ccconst * epsij * ΔXij * pc.volume[j] 
-                end
-            end
-
-            # compute the internal force density b_int nach BB
- #           b_int .= 0
-            for i in 1:pc.n_points
-                for current_bond in bond_ids_of_point[i]
-                    j = neighbor[current_bond]
+                    L = initial_distance[current_bond]
+                    Δxij = position[j] - position[i]
+                    l = abs(Δxij)
+                    ε = (l - L) / L
+                    #b_int[i] += mat.bc * ε / l * pc.volume[j] * Δxij
                     ΔXij = initial_distance[current_bond]
                     Δuij = displacement[j] - displacement[i]
- #                   b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
+                    b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
