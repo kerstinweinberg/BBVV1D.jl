@@ -36,7 +36,7 @@ end
 MAIN FUNCTION
 """
 function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{VelocityBC};
-                    n_timesteps::Int=1000, export_freq::Int=10,
+                    n_timesteps::Int=0, totaltime=-1e0, export_freq::Int=10,
                     export_path::String="results")
     walltime = @elapsed begin
         print("initialization...")
@@ -52,12 +52,18 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
         barepsilon = zeros(pc.n_points)
         barsigma = zeros(pc.n_points)
         b_int = zeros(pc.n_points)
-
         println("\r✔ initialization   ")
-        print("time loop...")
-
+ 
+        if totaltime > 0 && n_timesteps > 0
+            msg = "Specify either time or number of time steps, not both!"
+            throw(ArgumentError(msg))
+        end                                                                                # Zeitschritt (CFL)
         Δt = calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
+        n_timesteps=ceil(Int,totaltime/Δt)
+        printstyled(@sprintf("  %i Zeitschritte mit Δt = %6.2e sec\n", n_timesteps, Δt);color=:blue, bold=true)
 
+        print("time loop...")
+ 
         export_vtk(position, displacement, cells, export_path, 0, 0)
 
         for timestep in 1:n_timesteps
@@ -107,14 +113,16 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
                 end
             end
 
+            # back to PD
+
             # compute the internal force density b_int nach BB
- #           b_int .= 0
+            b_int .= 0
             for i in 1:pc.n_points
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
                     ΔXij = initial_distance[current_bond]
                     Δuij = displacement[j] - displacement[i]
- #                   b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
+                    b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
@@ -165,20 +173,6 @@ function find_bonds(pc::PointCloud, δ::Float64)
     return neighbor, initial_distance, bond_ids_of_point
 end
 
-function calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
-    timesteps = fill(typemax(Float64), pc.n_points)
-    for i in 1:pc.n_points
-        dtsum = 0.0
-        for current_bond in bond_ids_of_point[i]
-            j = neighbor[current_bond]
-            L = initial_distance[current_bond]
-            dtsum += pc.volume[j] * mat.bc / L
-        end
-        timesteps[i] = sqrt(2 * mat.rho / dtsum)
-    end
-    Δt = 0.7 * minimum(timesteps)
-    return Δt
-end
 
 get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
 

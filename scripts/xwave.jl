@@ -1,6 +1,8 @@
 using BBVV1D, DelimitedFiles, Printf
 
-function main(N::Int=1000)
+
+# Script zum Starten der Rechnung
+function stabwelle(N::Int=2000)
 
     # setup
     root = joinpath(@__DIR__, "..", "results", "xwave_1D_v1")
@@ -13,10 +15,10 @@ function main(N::Int=1000)
     
     # Aufbau Modell und Welle
     printstyled("\n--- PREPROCESSING ---\n", color=:blue, bold=true)
-    laenge = 1.0          # Stablaenge [m]
+    laenge = 2.0          # Stablaenge [m]
     ΔX = laenge / N
     T, vmax = 5.0e-5, 2.0 # Wellenpuls
-    printstyled(@sprintf("Welle mit Amplitude %6.2f m/s fuer T = %6.2f musec\n", vmax,T*1e+6);color=:blue, bold=true)
+    printstyled(@sprintf("  Wellenpuls in %6.2f m langem Stab hat die Amplitude %6.2f m/s fuer T = %6.2f musec\n", laenge, vmax,T*1e+6);color=:blue, bold=true)
 
     δ = 3.015ΔX
     E = 1000e6     # Polyamid, PE, PVC etc
@@ -28,48 +30,53 @@ function main(N::Int=1000)
     εc = 0.01
     mat = BondBasedMaterial(δ, bc, bbconst, ccconst, E, rho, εc)
     #    @show E,bbconst, ccconst
+    printstyled(@sprintf("  Diskretisierung aus %i Punkten, 1D, der Horizont ist %6.2f mm\n", N,(δ*1e+3));color=:blue, bold=true)
+    printstyled(@sprintf("  E = %8.2f MPa\n", (E*1e-6));color=:blue, bold=true)
+    printstyled(@sprintf("  ρ = %8.2f g/cm^3\n\n", rho);color=:blue, bold=true)
+
  
     rm(root; recursive=true, force=true)
     mkpath(vtk_path)
     mkpath(post_path)
 
-    printstyled("\n--- XWAVE WITH N=$(N) ---\n", bold=true, color=:blue)
-    printstyled(@sprintf(" E = %8.2f MPa\n", (E*1e-6));color=:blue, bold=true)
-    printstyled(@sprintf(" ρ = %8.2f g/cm^3\n\n", rho);color=:blue, bold=true)
+    printstyled("\n--- BERECHNUNG DES 1D-STABS AUS N=$(N) POINTS ---\n", bold=true, color=:blue)
     @time xwave(laenge, N, T, vmax, mat, vtk_path)
 
     # Auswertung Geschwindigkeit
     printstyled("\n--- POSTPROCESSING ---\n", color=:blue, bold=true)
-    function find_wave_position(r0, r, id)
-        t = first(r[:time])
-        t < 1.5T && return nothing
-        û, pids = @views findmax(r[:displacement])
-        x̂ = r[:position][1, pids]
+    c_L = sqrt(E/rho)
+
+    # finde in jedem File die maximale Verschiebung -  umax, tmax, xmax 
+    function find_wave_position(r0, r, id)       #  -> wave_position_data_file  
+        tmax = first(r[:time])
+        tmax < 1.5T && return nothing
+        umax, pids = @views findmax(r[:displacement])
+        xmax = r[:position][1, pids]
         open(wave_position_data_file, "a+") do io
-            @printf(io, "%.12f,%.12f,%.12f\n", t, x̂, û)
+            @printf(io, "%.12f,%.12f,%.12f\n", tmax, xmax, umax)
         end
         return nothing
     end
+
     @time begin
         process_each_export(find_wave_position, vtk_path)
-        results = readdlm(wave_position_data_file, ',', Float64)
-        t, x̂, û = results[:,1], results[:,2], results[:,3]
-        c_0 = 1000
+        results = readdlm(wave_position_data_file, ',', Float64)  # Zeilen mit umax
+        t, x̂, û = results[:,1], results[:,2], results[:,3]        # Vektoren
         c_w = calc_velocity(t, x̂, û)
-        Δc = c_w - c_0
-        Δcp = 100 * Δc / c_0
-        printstyled(@sprintf("c_0 = %8.2f m/s\n", c_0); color=:green, bold=true)
+        Δc = c_w - c_L
+        Δcp = 100 * Δc / c_L
+        printstyled(@sprintf("c_L = %8.2f m/s\n", c_L); color=:green, bold=true)
         printstyled(@sprintf("c_w = %8.2f m/s\n", c_w); color=:blue, bold=true)
         printstyled(@sprintf("Δc  = %8.2f m/s (%.3f %%)\n", Δc, Δcp); color=:red,
                     bold=true)
         open(wave_speed_summary_file, "w+") do io
             write(io, @sprintf("""--- WAVE SPEED SUMMARY ---
-                                Theoretical wave speed c_0 = √(E/ρ):
-                                    c_0 = %13.7f m/s
+                                Theoretical wave speed c_L = √(E/ρ):
+                                    c_L = %13.7f m/s
                                 Calculated wave speed in simulation:
                                     c_w = %13.7f m/s
                                     Δc  = %13.7f m/s (%.3f %%)
-                                """, c_0, c_w, Δc, Δcp))
+                                """, c_L, c_w, Δc, Δcp))
         end
         open(all_wave_speed_summary_file, "a+") do io
             write(io, @sprintf("%s, %13.7f\n", path, c_w))
@@ -79,6 +86,7 @@ function main(N::Int=1000)
     return nothing
 end
 
+# Diskretisierung und Aufruf der PD-Simulation
 function xwave(l, N, T, vmax, mat, path)
     Δx = l / N
     pc = PointCloud(l, Δx)
@@ -88,10 +96,11 @@ function xwave(l, N, T, vmax, mat, path)
     bc_left = VelocityBC(vwave, set_left)
     bcs = [bc_left]
     #
-    simulation(pc, mat, bcs; n_timesteps=1000, export_freq=10, export_path=path)
+    simulation(pc, mat, bcs; n_timesteps=0, totaltime=1e-3, export_freq=10, export_path=path)
     return nothing
 end
 
+# Auswertung der abgespeicherten Ergebnisse
 function process_each_export(f::F, vtk_path::AbstractString) where {F<:Function}
     vtk_files = find_vtk_files(vtk_path)
     process_each_export_serial(f, vtk_files)
@@ -125,13 +134,23 @@ function process_each_export_serial(f::F, vtk_files::Vector{String}) where {F<:F
     return nothing
 end
 
+# berechne Geschwindigkeit aus umax und zugehöriger Zeit
 function calc_velocity(t, x_w, u_w)
-    u_0 = first(u_w)
+ #   @show x_w[1:32]
+ #   n = length(x_w)
+ #   @show n
+    u_0 = first(u_w)                               # erstes Maximum der Welle
     valid_until = findfirst(x -> !isapprox(u_0, x; rtol=0.01), u_w)
-    if !isnothing(valid_until)
+    if !isnothing(valid_until)                     # einmal ?
         x_w = x_w[1:valid_until-1]
         t = t[1:valid_until-1]
     end
+ #   @show u_0
+#    n = length(x_w)
+#    @show n
+ #  @show x_w 
+   # @show t
+
     n = length(t)
     @assert n == length(x_w)
     t̄ = sum(t) / n
@@ -149,4 +168,4 @@ function calc_velocity(t, x_w, u_w)
     return v
 end
 
-main()
+stabwelle()
