@@ -62,7 +62,7 @@ function stabwelle(N::Int=2000)
         process_each_export(find_wave_position, vtk_path)
         results = readdlm(wave_position_data_file, ',', Float64)  # Zeilen mit umax
         t, x̂, û = results[:,1], results[:,2], results[:,3]        # Vektoren
-        c_w = calc_velocity(t, x̂, û)
+        c_w = estimate_velocity(t, x̂, û)                              # aus x-t-Fit
         Δc = c_w - c_L
         Δcp = 100 * Δc / c_L
         printstyled(@sprintf("c_L = %8.2f m/s\n", c_L); color=:green, bold=true)
@@ -134,38 +134,47 @@ function process_each_export_serial(f::F, vtk_files::Vector{String}) where {F<:F
     return nothing
 end
 
-# berechne Geschwindigkeit aus umax und zugehöriger Zeit
-function calc_velocity(t, x_w, u_w)
- #   @show x_w[1:32]
- #   n = length(x_w)
- #   @show n
+# berechne Geschwindigkeit aus Differenzenquotient Δx/Δt bei umax 
+function estimate_velocity(t_w, x_w, u_w)
+
     u_0 = first(u_w)                               # erstes Maximum der Welle
     valid_until = findfirst(x -> !isapprox(u_0, x; rtol=0.01), u_w)
     if !isnothing(valid_until)                     # einmal ?
-        x_w = x_w[1:valid_until-1]
-        t = t[1:valid_until-1]
-    end
- #   @show u_0
-#    n = length(x_w)
-#    @show n
- #  @show x_w 
-   # @show t
-
-    n = length(t)
+           x_w = x_w[1:valid_until-1]
+           t_w = t_w[1:valid_until-1]
+    end  
+    n = length(t_w)                                # Anzahl Zeilen
     @assert n == length(x_w)
-    t̄ = sum(t) / n
-    x̄ = sum(x_w) / n
-    v = sum((t .- t̄) .* (x_w .- x̄)) / sum((t .- t̄) .^ 2)
-# print(u_0)
+ 
+    # Differenzenquotient
+    index0 = 1
+    index1 = n
+    Δx = x_w[index1]-x_w[index0]
+    Δt = t_w[index1]-t_w[index0]
+    @show n, index0, index1
 
-    t̄ = sum(t) / n
-    x̄ = sum(x_w) / n
-    v1 = x̄/ t̄
- #    @show  x_w
- #    @show  x̄   
- #    @show  t̄   
-     @show  v1   
+    # Geschwindigkeit
+    v = Δx/Δt
+    @show v
+ 
     return v
 end
 
+# berechne Geschwindigkeit aus gefitteter x-t-Gerade bei umax
+function calc_velocity(t, x_w, u_w)
+       u_0 = first(u_w)                               # erstes Maximum der Welle
+       valid_until = findfirst(x -> !isapprox(u_0, x; rtol=0.01), u_w)
+       if !isnothing(valid_until)                     # einmaliger Weellendurchlauf 
+           x_w = x_w[1:valid_until-1]
+           t = t[1:valid_until-1]
+       end
+       n = length(t)
+       @assert n == length(x_w)
+ 
+       t̄ = sum(t) / n
+       x̄ = sum(x_w) / n
+       v = sum((t .- t̄) .* (x_w .- x̄)) / sum((t .- t̄) .^ 2)
+ 
+       return v
+   end
 stabwelle()
