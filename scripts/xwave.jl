@@ -2,7 +2,7 @@ using BBVV1D, DelimitedFiles, Printf
 
 
 # Script zum Starten der Rechnung
-function stabwelle(N::Int=2000)
+function stabwelle(N::Int=1000000)
 
     # setup
     root = joinpath(@__DIR__, "..", "results", "xwave_1D_v1")
@@ -18,7 +18,7 @@ function stabwelle(N::Int=2000)
     laenge = 2.0          # Stablaenge [m]
     ΔX = laenge / N
     T, vmax = 5.0e-5, 2.0 # Wellenpuls
-    printstyled(@sprintf("  Wellenpuls in %6.2f m langem Stab hat die Amplitude %6.2f m/s fuer T = %6.2f musec\n", laenge, vmax,T*1e+6);color=:blue, bold=true)
+    printstyled(@sprintf("  Wellenpuls in %6.2f m langem Stab hat die Amplitude %6.2f m/s fuer T = %6.2f musec (5 cm)\n", laenge, vmax,T*1e+6);color=:blue, bold=true)
 
     δ = 3.015ΔX
     E = 1000e6     # Polyamid, PE, PVC etc
@@ -44,7 +44,7 @@ function stabwelle(N::Int=2000)
 
     # Auswertung Geschwindigkeit
     printstyled("\n--- POSTPROCESSING ---\n", color=:blue, bold=true)
-    c_L = sqrt(E/rho)
+    c_L = sqrt(E/rho)                            #  M=E*(1-nu)/((1+nu)*(1-2*nu))
 
     # finde in jedem File die maximale Verschiebung -  umax, tmax, xmax 
     function find_wave_position(r0, r, id)       #  -> wave_position_data_file  

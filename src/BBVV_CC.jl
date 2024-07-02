@@ -116,13 +116,13 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
             # back to BB-PD
 
             # compute the internal force density b_int nach BB
-    #        b_int .= 0
+            b_int .= 0
             for i in 1:pc.n_points
                 for current_bond in bond_ids_of_point[i]
                     j = neighbor[current_bond]
                     ΔXij = initial_distance[current_bond]
                     Δuij = displacement[j] - displacement[i]
-     #               b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
+                   b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
                 end
             end
 
