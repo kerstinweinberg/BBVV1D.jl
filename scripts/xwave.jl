@@ -2,10 +2,10 @@ using BBVV1D, DelimitedFiles, Printf
 
 
 # Script zum Starten der Rechnung
-function stabwelle(N::Int=1000000)
+function stabwelle(N::Int=1000000; model::Symbol=:BB)
 
     # setup
-    root = joinpath(@__DIR__, "..", "results", "xwave_1D_v1")
+    root = joinpath(@__DIR__, "..", "results", "xwave_1D_v1_$(model)")
     path = joinpath(root, "xwave_n-$(N)")
     vtk_path = joinpath(path, "vtk")
     post_path = joinpath(path, "post")
@@ -40,7 +40,7 @@ function stabwelle(N::Int=1000000)
     mkpath(post_path)
 
     printstyled("\n--- BERECHNUNG DES 1D-STABS AUS N=$(N) POINTS ---\n", bold=true, color=:blue)
-    @time xwave(laenge, N, T, vmax, mat, vtk_path)
+    @time xwave(laenge, N, T, vmax, mat, vtk_path; model)
 
     # Auswertung Geschwindigkeit
     printstyled("\n--- POSTPROCESSING ---\n", color=:blue, bold=true)
@@ -87,7 +87,7 @@ function stabwelle(N::Int=1000000)
 end
 
 # Diskretisierung und Aufruf der PD-Simulation
-function xwave(l, N, T, vmax, mat, path)
+function xwave(l, N, T, vmax, mat, path; model::Symbol=:BB)
     Δx = l / N
     pc = PointCloud(l, Δx)
     #
@@ -96,7 +96,7 @@ function xwave(l, N, T, vmax, mat, path)
     bc_left = VelocityBC(vwave, set_left)
     bcs = [bc_left]
     #
-    simulation(pc, mat, bcs; n_timesteps=0, totaltime=1e-3, export_freq=10, export_path=path)
+    simulation(pc, mat, bcs; model, totaltime=1e-3, export_freq=10, export_path=path)
     return nothing
 end
 

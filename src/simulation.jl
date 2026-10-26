@@ -1,9 +1,3 @@
-# reference to original file
-
-using Printf, WriteVTK
-
-export PointCloud, BondBasedMaterial, VelocityBC, simulation, read_vtk
-
 struct PointCloud
     n_points::Int
     position::Vector{Float64}
@@ -34,10 +28,22 @@ end
 
 """
 MAIN FUNCTION
+
+    simulation(pc, mat, bcs; model=:BB, n_timesteps=0, totaltime=-1.0, ...)
+
+`model = :BB` (bond-based) oder `:CC` (continuum-kinematics, über gemittelte Dehnung).
+Entweder `n_timesteps` oder `totaltime` angeben, nicht beides.
 """
 function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{VelocityBC};
-                    n_timesteps::Int=1000, export_freq::Int=10,
-                    export_path::String="results")
+                    model::Symbol=:BB, n_timesteps::Int=0, totaltime=-1e0,
+                    export_freq::Int=10, export_path::String="results")
+    model in (:BB, :CC) || throw(ArgumentError("unknown model $model, use :BB or :CC"))
+    if totaltime > 0 && n_timesteps > 0
+        throw(ArgumentError("Specify either time or number of time steps, not both!"))
+    elseif totaltime ≤ 0 && n_timesteps ≤ 0
+        throw(ArgumentError("Specify either totaltime or n_timesteps!"))
+    end
+
     walltime = @elapsed begin
         print("initialization...")
 
@@ -49,12 +55,19 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
         velocity = zeros(pc.n_points)
         velocity_half = zeros(pc.n_points)
         acceleration = zeros(pc.n_points)
+        barepsilon = zeros(pc.n_points)
         b_int = zeros(pc.n_points)
-
         println("\r✔ initialization   ")
-        print("time loop...")
 
+        # Zeitschritt (CFL)
         Δt = calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
+        if totaltime > 0
+            n_timesteps = ceil(Int, totaltime / Δt)
+        end
+        printstyled(@sprintf("  Modell %s, %i Zeitschritte mit Δt = %6.2e sec\n", model,
+                             n_timesteps, Δt); color=:blue, bold=true)
+
+        print("time loop...")
 
         export_vtk(position, displacement, cells, export_path, 0, 0)
 
@@ -81,14 +94,12 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
             end
 
             # compute the internal force density b_int
-            b_int .= 0
-            for i in 1:pc.n_points
-                for current_bond in bond_ids_of_point[i]
-                    j = neighbor[current_bond]
-                    ΔXij = initial_distance[current_bond]
-                    Δuij = displacement[j] - displacement[i]
-                    b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]  
-                end
+            if model === :BB
+                force_bb!(b_int, displacement, pc, mat, neighbor, initial_distance,
+                          bond_ids_of_point)
+            else
+                force_cc!(b_int, barepsilon, displacement, pc, mat, neighbor,
+                          initial_distance, bond_ids_of_point)
             end
 
             # solve the equation of motion
@@ -107,6 +118,7 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
 
     open(joinpath(export_path, "logfile.log"), "w+") do io
         write(io, "simulation completed after $walltime seconds (wall time)\n\n")
+        write(io, "model = $model\n")
         write(io, "number of points = $(pc.n_points)\n")
         write(io, "number of bonds = $(length(neighbor))\n")
         write(io, "Δt = $Δt\n")
@@ -115,14 +127,58 @@ function simulation(pc::PointCloud, mat::BondBasedMaterial, bcs::Vector{Velocity
     return nothing
 end
 
+# internal force density nach BB-PD
+function force_bb!(b_int, displacement, pc, mat, neighbor, initial_distance,
+                   bond_ids_of_point)
+    b_int .= 0
+    for i in 1:pc.n_points
+        for current_bond in bond_ids_of_point[i]
+            j = neighbor[current_bond]
+            ΔXij = initial_distance[current_bond]
+            Δuij = displacement[j] - displacement[i]
+            b_int[i] += mat.E * mat.bbconst * Δuij / ΔXij * pc.volume[j]
+        end
+    end
+    return nothing
+end
+
+# internal force density nach CC-PD über die gemittelte Dehnung barepsilon
+function force_cc!(b_int, barepsilon, displacement, pc, mat, neighbor, initial_distance,
+                   bond_ids_of_point)
+    # compute the averaged strain barepsilon at i
+    barepsilon .= 0
+    for i in 1:pc.n_points
+        for current_bond in bond_ids_of_point[i]
+            j = neighbor[current_bond]
+            ΔXij = initial_distance[current_bond]
+            Δuij = displacement[j] - displacement[i]
+            barepsilon[i] += mat.ccconst * Δuij * ΔXij * pc.volume[j]
+        end
+    end
+
+    b_int .= 0
+    for i in 1:pc.n_points
+        for current_bond in bond_ids_of_point[i]
+            j = neighbor[current_bond]
+            ΔXij = initial_distance[current_bond]
+            epsij = barepsilon[j] + barepsilon[i]
+            b_int[i] += mat.E * mat.ccconst * epsij * ΔXij * pc.volume[j]
+        end
+    end
+    return nothing
+end
+
+# Punkte sind sortiert und äquidistant -> nur ein Indexfenster um i durchsuchen
 function find_bonds(pc::PointCloud, δ::Float64)
     neighbor = Vector{Int}()
     initial_distance = Vector{Float64}()
     bond_ids_of_point = fill(0:0, pc.n_points)
     bond_counter = 0
+    Δx = minimum(pc.volume)
+    window = ceil(Int, δ / Δx) + 1
     for i in 1:pc.n_points
         bond_ids_of_point_start = bond_counter + 1
-        for j in 1:pc.n_points
+        for j in max(1, i - window):min(pc.n_points, i + window)
             if i !== j
                 L = abs(pc.position[j] - pc.position[i])
                 if L <= δ
@@ -138,7 +194,20 @@ function find_bonds(pc::PointCloud, δ::Float64)
     return neighbor, initial_distance, bond_ids_of_point
 end
 
-
+function calc_stable_timestep(pc, mat, neighbor, bond_ids_of_point, initial_distance)
+    timesteps = fill(typemax(Float64), pc.n_points)
+    for i in 1:pc.n_points
+        dtsum = 0.0
+        for current_bond in bond_ids_of_point[i]
+            j = neighbor[current_bond]
+            L = initial_distance[current_bond]
+            dtsum += pc.volume[j] * mat.bc / L
+        end
+        timesteps[i] = sqrt(2 * mat.rho / dtsum)
+    end
+    Δt = 0.7 * minimum(timesteps)
+    return Δt
+end
 
 get_cells(n::Int) = [MeshCell(VTKCellTypes.VTK_VERTEX, (i,)) for i in 1:n]
 
@@ -150,8 +219,3 @@ function export_vtk(position, displacement, cells, export_path, timestep, time)
     end
     return nothing
 end
-
-include("VtkReader.jl")
-using .VtkReader
-
-

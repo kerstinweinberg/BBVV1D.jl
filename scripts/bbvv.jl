@@ -8,9 +8,11 @@ function bbvv(simname, l, Δx, vmax, T, nt)
     E = 2.1e5
     nu = 0.25
     bc = 18 * E / (3 * (1 - 2 * nu)) / (π * δ^2)
+    bbconst = 2 / δ^2
+    ccconst = 3 / (2 * δ^3)
     rho = 8e-6
     εc = 0.01
-    mat = BondBasedMaterial(δ, bc, rho, εc)
+    mat = BondBasedMaterial(δ, bc, bbconst, ccconst, E, rho, εc)
     set_left = findall(p -> p ≤ Δx, pc.position)
     vwave(t) = t < T ? vmax * sin(2π/T * t) : 0
     bc_left = VelocityBC(vwave, set_left)
