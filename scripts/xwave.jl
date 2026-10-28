@@ -24,12 +24,8 @@ function stabwelle(N::Int=1000000; model::Symbol=:BB)
     E = 1000e6     # Polyamid, PE, PVC etc
     rho = 1000.0   # ergibt cL=1000 m/sec
     #
-    bbconst = 2/(δ^2)
-    bc = E*bbconst
-    ccconst = 3/(2*δ^3)
     εc = 0.01
-    mat = BondBasedMaterial(δ, bc, bbconst, ccconst, E, rho, εc)
-    #    @show E,bbconst, ccconst
+    params = MaterialParameters(; horizon=δ, rho, E, epsilon_c=εc)
     printstyled(@sprintf("  Diskretisierung aus %i Punkten, 1D, der Horizont ist %6.2f mm\n", N,(δ*1e+3));color=:blue, bold=true)
     printstyled(@sprintf("  E = %8.2f MPa\n", (E*1e-6));color=:blue, bold=true)
     printstyled(@sprintf("  ρ = %8.2f g/cm^3\n\n", rho);color=:blue, bold=true)
@@ -40,7 +36,7 @@ function stabwelle(N::Int=1000000; model::Symbol=:BB)
     mkpath(post_path)
 
     printstyled("\n--- BERECHNUNG DES 1D-STABS AUS N=$(N) POINTS ---\n", bold=true, color=:blue)
-    @time xwave(laenge, N, T, vmax, mat, vtk_path; model)
+    @time xwave(laenge, N, T, vmax, params, vtk_path; model)
 
     # Auswertung Geschwindigkeit
     printstyled("\n--- POSTPROCESSING ---\n", color=:blue, bold=true)
@@ -87,7 +83,7 @@ function stabwelle(N::Int=1000000; model::Symbol=:BB)
 end
 
 # Diskretisierung und Aufruf der PD-Simulation
-function xwave(l, N, T, vmax, mat, path; model::Symbol=:BB)
+function xwave(l, N, T, vmax, params, path; model::Symbol=:BB)
     Δx = l / N
     pc = PointCloud(l, Δx)
     #
@@ -96,7 +92,8 @@ function xwave(l, N, T, vmax, mat, path; model::Symbol=:BB)
     bc_left = VelocityBC(vwave, set_left)
     bcs = [bc_left]
     #
-    simulation(pc, mat, bcs; model, totaltime=1e-3, export_freq=10, export_path=path)
+    simulation(pc, params, default_material(model), bcs; totaltime=1e-3, export_freq=10,
+               export_path=path)
     return nothing
 end
 
