@@ -1,0 +1,172 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[ngerman]{babel}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage[margin=2.2cm]{geometry}
+\usepackage{url}
+
+\title{Peridynamische Modelle im 1D-Stab -- Kurzfassung}
+\author{BBVV1D.jl}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+Aufbau, Bezeichnungen und Zeitintegration folgen
+Peridynamics.jl\footnote{\url{https://github.com/kaipartmann/Peridynamics.jl}}; die 1D-Formeln sind die dortigen 3D-Formeln
+mit $E$ statt $3K$ bzw.\ $\alpha$ statt $15G$.
+
+\section*{Notation}
+Punkte $X_i$ mit Volumen $V_j=\Delta x$, Horizont $\delta$ (hier $\delta = 3.015\,\Delta x$), Bonds $j\in\mathcal H_i$ mit
+\[
+  \xi_{ij} = X_j - X_i,\qquad L_{ij} = |\xi_{ij}|,\qquad l_{ij} = |x_j - x_i|,\qquad
+  e_{ij} = l_{ij} - L_{ij},\qquad \varepsilon_{ij} = e_{ij}/L_{ij}.
+\]
+Kernel (Influence-Funktion) $\omega(L)$: konstant $1$, linear $\delta/L$ (Standard wie in Peridynamics.jl)
+oder kubischer B-Spline. Momente der Bondlängen pro Punkt:
+\[
+  M_{n,i} = \sum_{j\in\mathcal H_i} L_{ij}^n\,V_j,\qquad q_i = M_{1,i},\qquad
+  m_i = \sum_{j} \omega_{ij} L_{ij}^2\,V_j .
+\]
+Im Inneren gilt bei $\delta = 3.015\,\Delta x$:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+  \toprule
+  & diskret & Kontinuum \\
+  \midrule
+  $q$   & $12\,\Delta x^2$ & $\delta^2 \approx 9.09\,\Delta x^2$ \\
+  $M_2$ & $28\,\Delta x^3$ & $2\delta^3/3 \approx 18.3\,\Delta x^3$ \\
+  $M_3$ & $72\,\Delta x^4$ & $\delta^4/2 \approx 41.3\,\Delta x^4$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Bondkonstante und Zeitschritt.} $b_c = 2E/\delta^2$ (1D-Gegenstück zu $18K/(\pi\delta^4)$,
+aus $\tfrac12 E\varepsilon^2 = \tfrac14 b_c\varepsilon^2\delta^2$). Für alle Modelle
+$\Delta t = 0.7\,\min_i \sqrt{2\rho \big/ \textstyle\sum_j V_j\, b_c/L_{ij}}$ wie in Peridynamics.jl.
+
+\section*{Modelle}
+
+\paragraph{BB -- bond-based.}
+\[
+  b_i = \sum_{j} \beta_{ij}\, b_c\, \varepsilon_{ij}\,\frac{x_j-x_i}{l_{ij}}\,V_j .
+\]
+Ohne Korrektur ist $\beta = 1$; mit den Kontinuumskonstanten ist die Welle dann um $+15\,\%$ zu schnell.
+\emph{Energiekorrektur} (Le \& Bobaru 2018, wie Peridynamics.jl):
+$\beta_{ij} = \tfrac12(\mathrm{m}_i + \mathrm{m}_j)$ mit $\mathrm{m}_i = \Psi_\mathrm{theo}/\Psi_{\mathrm{PD},i}$
+bei gleichmäßiger Dehnung. In 1D ergibt das genau
+$\beta_{ij} b_c = E\,(1/q_i + 1/q_j)$, also die diskrete Kalibrierung inklusive Rand.
+
+\paragraph{CC -- Energieäquivalenz (Mittelung über $\varepsilon^2$).}
+\[
+  \bar\varepsilon_i = c \sum_j L_{ij}\,\Delta u_{ij}\,V_j ,\qquad
+  b_i = E\,c \sum_j \bigl(\bar\varepsilon_i+\bar\varepsilon_j\bigr) L_{ij}\,V_j ,
+\]
+\[
+  c = \frac{3}{2\delta^3}\ \text{(Kontinuum, Original)}\qquad\text{oder}\qquad
+  c = \frac{1}{\sqrt{q\,M_3}}\ \text{(diskret)}.
+\]
+Wegen der geraden Gewichtung $L_{ij}$ ist $\bar\varepsilon$ kein Dehnungsmaß: Für $u = \varepsilon X$ ist
+$\bar\varepsilon = 0$ im Inneren, für quadratisches $u$ gilt $\bar\varepsilon = c\,M_3\,u''/2$.
+Mit $c = 3/(2\delta^3)$ ergibt sich in 1D $b = 2.59\,E u''$ ($+61\,\%$ Wellengeschwindigkeit).
+Die Energiekorrektur ist nicht anwendbar, weil $\Psi_\mathrm{PD} = 0$ bei gleichmäßiger Dehnung.
+
+\paragraph{OSB -- ordinary state-based (LPS).}
+\[
+  \theta_i = \frac{1}{m_i}\sum_j \omega_{ij}\, L_{ij}\, e_{ij}\,V_j ,\qquad
+  \Psi_i = \frac{E}{2}\theta_i^2 + \frac{\alpha}{2m_i}\sum_j \omega_{ij}\bigl(e_{ij} - \theta_i L_{ij}\bigr)^2 V_j ,
+\]
+\[
+  t_{ij} = \omega_{ij}\,\bigl(c_2 L_{ij} + c_1 e_{ij}\bigr),\qquad c_1 = \frac{\alpha}{m_i},\quad
+  c_2 = \theta_i\Bigl(\frac{E}{m_i} - c_1\Bigr),
+\]
+$t_{ij}$ wirkt auf $i$ mit $V_j$ und als Reaktion auf $j$ mit $-V_i$. Standard $\alpha = E$.
+Da $\theta$ auch am Rand exakt ist, ist der Energie-Korrekturfaktor in 1D gleich $1$.
+
+\paragraph{Äquivalenz.} Mit linearem Kernel und $\alpha = E$ fällt $\theta$ heraus:
+$t_{ij} = E\,\delta\,\varepsilon_{ij}/m_i$ und $m_i = \delta\,q_i$. \textbf{OSB (linear, $\alpha=E$) ist in 1D
+identisch mit BB mit Energiekorrektur} -- auch am Rand und in allen Rechnungen bis auf Rundung.
+
+\section*{Dispersionsrelationen}
+Mit $u_j = \hat u\,e^{\mathrm i(kX_j-\omega t)}$ ergibt sich im Inneren $\rho\,\omega^2 = \Phi(k)$ mit
+\[
+  S = \sum_j \omega_j \xi_j \sin(k\xi_j)\,V_j,\quad C = \sum_j \omega_j\bigl(1-\cos k\xi_j\bigr)V_j ,\quad
+  P_\pm = \sum_j \bigl(1\pm\cos k\xi_j\bigr)L_j\,V_j ,
+\]
+\begin{align*}
+  \Phi_{\mathrm{BB}} &= \frac{2E}{q}\sum_j \frac{1-\cos k\xi_j}{L_j}\,V_j , \qquad
+  \Phi_{\mathrm{CC}} = E\,c^2\,P_+\,P_- , \qquad
+  \Phi_{\mathrm{OSB}} = E\,\frac{S^2}{m^2} + \frac{\alpha}{m}\Bigl(2C - \frac{S^2}{m}\Bigr) .
+\end{align*}
+Für $k\to 0$ gilt bei allen $\Phi \to E k^2$ (diskret kalibriert). Für lange Wellen
+$\omega/(ck) \approx 1 - \beta\,(k\Delta x)^2$ mit
+\[
+  \beta_{\mathrm{BB}} = \frac{M_3}{24\,q},\qquad
+  \beta_{\mathrm{CC}} = \frac{M_5}{24\,M_3} + \frac{M_3}{8\,q},\qquad
+  \beta_{\mathrm{OSB}} = \frac{M^\omega_4}{M^\omega_2}\Bigl(\frac16 - \frac{\alpha}{8E}\Bigr),\quad M^\omega_n = \sum_j \omega_j L_j^n V_j .
+\]
+Für $\alpha = 4E/3$ verschwindet der $k^2$-Term bei OSB (für jeden Kernel).
+CC hat für $\delta \ge 2\Delta x$ keine Nullenergie-Mode ($P_+ > 0$), OSB nicht für $\alpha > 0$.
+Die Formeln sind numerisch gegen die Kraftfunktionen geprüft.
+
+\section*{Vergleich}
+\begin{center}
+\small
+\begin{tabular}{@{}lccccc@{}}
+  \toprule
+  & BB & CC & \multicolumn{3}{c}{OSB, Kernel $\omega$} \\
+  \cmidrule(l){4-6}
+  & Energiek. & diskret & konst. & linear & B-Spline \\
+  \midrule
+  $\beta$ (lange Wellen)          & $0.25$  & $1.07$ & $0.29$ & $0.25$ & $0.086$ \\
+  Phasenfehler $<1\,\%$ ab $\lambda/\Delta x$ & $31$ & $65$ & $34$ & $31$ & $18$ \\
+  Impulserhaltung                 & ja      & nein (Rand) & ja & ja & ja \\
+  max.\ Fehler, $l/1000$\textsuperscript{*} & $0.037$ & $0.35$ & $0.045$ & $0.037$ & $0.012$ \\
+  max.\ Fehler, $l/2000$\textsuperscript{*} & $0.010$ & $0.14$ & $0.012$ & $0.010$ & $0.006$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+{\footnotesize\textsuperscript{*}PMMA ($E = 3.2$\,GPa, $\rho = 1200$\,kg/m$^3$), Stab $1$\,m, Geschwindigkeitspuls über eine
+Randschicht der Dicke $\delta$, Pulslänge $l/10$, freies Ende, Laufzeit $2l/c$;
+Fehler $\max_t \Vert u-u_\mathrm{ref}\Vert/\max\Vert u_\mathrm{ref}\Vert$ gegen d'Alembert.
+Ohne Korrektur (BB) bzw.\ mit $c = 3/(2\delta^3)$ (CC) liegt der Fehler bei etwa $1.5$: Die Pulse überlappen nicht mehr.
+Bei CC stammt etwa $0.1$ aus der Dispersion im Inneren, der Rest aus der Reflexion am freien Ende.
+OSB mit $\alpha = 10E$ ist mit dem Zeitschritt aus $b_c$ instabil.}
+
+\paragraph{Abgleich mit Peridynamics.jl (3D).} Dünner Stab mit $500$ Punkten in Längsrichtung
+($\Delta x = l/500$, $\delta = 3.015\,\Delta x$) und $4\times4$ bzw.\ $8\times8$ Punkten im Querschnitt, $\nu = 0.25$,
+BB und OSB (linearer Kernel) jeweils mit Energiekorrektur, gleicher Puls über eine Randschicht der Dicke $\delta$,
+$u_x$ über den Querschnitt gemittelt. Die Wellengeschwindigkeit ist aus der Laufzeit des Pulsmaximums zwischen
+$x = 0.3\,l$ und $0.8\,l$ bestimmt, der Fehler wie oben gegen d'Alembert:
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+  \toprule
+  & \multicolumn{2}{c}{$c/\sqrt{E/\rho}$} & \multicolumn{2}{c}{max.\ Fehler} \\
+  \cmidrule(lr){2-3}\cmidrule(l){4-5}
+  Querschnitt & BB & OSB & BB & OSB \\
+  \midrule
+  $4\times4$ ($8\,\mathrm{mm}$)  & $1.032$ & $1.048$ & $1.43$ & $1.44$ \\
+  $8\times8$ ($16\,\mathrm{mm}$) & $0.999$ & $0.987$ & $0.24$ & $0.38$ \\
+  1D, $\Delta x = l/500$         & $1.000$ & $1.000$ & $0.15$ & $0.15$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+
+Bei $4\times4$ Punkten ist der Querschnitt mit $8\,\mathrm{mm} \approx 1.3\,\delta$ schmaler als der Horizont
+($6\,\mathrm{mm}$ Radius); die Welle ist um $3$--$5\,\%$ zu schnell, vermutlich weil die Querkontraktion teilweise behindert ist
+(vollständig behindert: $\sqrt{M/E} = 1.095$ mit $M = E(1-\nu)/((1+\nu)(1-2\nu))$). Bei $8\times8$ Punkten
+stimmt die Ankunftszeit, der Puls wird aber breiter und zieht Nachschwingungen hinter sich her, bei OSB stärker als bei BB.
+Der verbleibende Fehler ist größer als in 1D bei gleichem $\Delta x$; mit dem Fehlermaß
+lassen sich die Ankunftszeit und die Pulsverbreiterung nicht unterscheiden.
+Nach diesen beiden Rechnungen sollte der Querschnitt für einen Vergleich mit 1D mindestens etwa $2.5\,\delta$ breit sein
+($8\times8$: $16\,\mathrm{mm} \approx 2.7\,\delta$); feinere Querschnitte habe ich nicht gerechnet.
+
+\paragraph{Randeffekt.} In allen Modellen gilt $b\neq 0$ unter homogener Dehnung in einem Streifen der Breite $2\delta$ am Rand,
+weil die Momente der Nachbarn dort abweichen (peridynamischer Oberflächeneffekt).
+Wird die Last nur an einem einzelnen Punkt aufgebracht, regt das kurzwellige Anteile an; über eine Randschicht der Dicke $\delta$ nicht.
+
+\end{document}
