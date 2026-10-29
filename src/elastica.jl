@@ -264,3 +264,69 @@ function elastica_pfad(sys::ElasticaSystem, Δs::AbstractVector; Q::Real=0.0)
     end
     return pfad
 end
+
+#-- Dynamik -------------------------------------------------------------------------------
+
+"Massen je Freiheitsgrad (x, z) der Knoten 1..N-1: ρA V_i"
+elastica_massen(sys::ElasticaSystem, ρA::Real) =
+    repeat(ρA .* sys.volume[2:sys.N]; inner=2)
+
+"""
+    elastica_omega_max(sys, q, Δ, ρA; iter=60)
+
+Größte Eigenkreisfrequenz von M⁻¹K in der Lage q (Potenzmethode), für den Zeitschritt.
+"""
+function elastica_omega_max(sys::ElasticaSystem, q::AbstractVector, Δ::Real, ρA::Real;
+                            iter::Int=60)
+    K = elastica_tangente(sys, q, Δ)
+    s = 1 ./ sqrt.(elastica_massen(sys, ρA))
+    v = randn(length(q))
+    λ = 0.0
+    for _ in 1:iter
+        u = s .* (K * (s .* v))
+        λ = norm(u) / norm(v)
+        v = u ./ norm(u)
+    end
+    return sqrt(λ)
+end
+
+"""
+    elastica_dynamik(sys, Δ, ρA; q0, v0=0, Q=t->0, tend, Δt, n_out=400, c=0)
+
+Velocity-Verlet für M q̈ = -∂W/∂q + Q(t) e_mitte - c M q̇ bei fester Verkürzung Δ, mit der
+Querkraft Q(t) in der Mitte und optionaler massenproportionaler Dämpfung c.
+Rückgabe `(; time, q, v, zmitte, Ekin, W, Wext)`; W + Ekin - Q z_mitte bleibt ohne Dämpfung
+und bei konstantem Q erhalten.
+"""
+function elastica_dynamik(sys::ElasticaSystem, Δ::Real, ρA::Real; q0::AbstractVector,
+                          v0=zero(q0), Q=t -> 0.0, tend::Real, Δt::Real, n_out::Int=400,
+                          c::Real=0.0)
+    M = elastica_massen(sys, ρA)
+    imitte = 2 * (sys.N ÷ 2)
+    n_steps = ceil(Int, tend / Δt)
+    Δt = tend / n_steps
+    freq = max(1, n_steps ÷ n_out)
+    q = copy(q0)
+    v = collect(float.(v0 .+ zero(q0)))
+    r, _ = elastica_residuum(sys, q, Δ; Q=Q(0.0))
+    a = -r ./ M .- c .* v
+    aus = (; time=Float64[], q=Vector{Float64}[], zmitte=Float64[], Ekin=Float64[],
+           W=Float64[], Wext=Float64[])
+    function speichere!(t)
+        push!(aus.time, t); push!(aus.q, copy(q)); push!(aus.zmitte, q[imitte])
+        push!(aus.Ekin, 0.5 * sum(M .* v .^ 2))
+        push!(aus.W, elastica_energie(sys, elastica_lagen(sys, q, Δ)))
+        push!(aus.Wext, Q(t) * q[imitte])
+    end
+    speichere!(0.0)
+    for step in 1:n_steps
+        t = step * Δt
+        @. v += 0.5Δt * a
+        @. q += Δt * v
+        r, _ = elastica_residuum(sys, q, Δ; Q=Q(t))
+        @. a = -r / M - c * v
+        @. v += 0.5Δt * a
+        step % freq == 0 && speichere!(t)
+    end
+    return aus
+end

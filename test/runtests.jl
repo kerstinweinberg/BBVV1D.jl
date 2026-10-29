@@ -220,6 +220,15 @@ const CALIBRATED = ["BB energy", "CC discrete", "CCF", "BAQP", "BAQP linear", "O
             p = elastica_pfad(s, range(0.01, 0.5; length=30) .* L)
             @test p[end].F / (π^2 * EI / L^2) ≈ 1.34945 rtol = 5e-3
         end
+        @testset "Dynamik: Energieerhaltung mit Sprunglast" begin
+            s = ElasticaSystem(L, 40, 3.015 * L / 40, EI, EA)
+            q0 = elastica_pfad(s, range(0.002, 0.05; length=6) .* L)[end].q
+            ρA = 1500 * π * 1.66e-3^2 / 4
+            Δt = 0.5 * 2 / elastica_omega_max(s, q0, 0.05L, ρA)
+            h = elastica_dynamik(s, 0.05L, ρA; q0, Q=t -> -0.3, tend=0.01, Δt, n_out=20)
+            Eg = h.W .+ h.Ekin .- h.Wext
+            @test maximum(abs, Eg .- Eg[1]) < 1e-3 * maximum(h.W)
+        end
     end
 
     @testset "simulation history" begin
