@@ -5,14 +5,19 @@
 
 using CairoMakie
 
-# feste Reihenfolge der Kategorien (validierte Standardpalette, Slots 1-4)
+# feste Reihenfolge der Kategorien (validierte Standardpalette, Slots 1-5, 7 und 8)
 const FARBEN = Dict("BB" => "#2a78d6", "CC" => "#eb6834", "OSB" => "#1baf7a",
+                    "CC |ξ|" => "#6250d6", "BAQP" => "#e34948",
                     "BB-3D" => "#eda100", "OSB-3D" => "#e87ba4")
 const FARBEN_REST = ["#eda100", "#e87ba4", "#008300"]
 const REF_FARBE = "#3d3d3a"
 const REF_LABEL = "analytisch"
 
 farbe(label, i=1) = get(FARBEN, label, FARBEN_REST[mod1(i, length(FARBEN_REST))])
+
+# OSB fällt im Stab mit BB zusammen (α = E, ω = δ/L) -> gestrichelt, damit BB sichtbar bleibt
+const LINIENSTIL = Dict("OSB" => :dash)
+linienstil(label) = get(LINIENSTIL, label, :solid)
 
 # frühere Kurven breiter, damit nahezu deckungsgleiche Modelle sichtbar bleiben
 linienbreite(i, n) = 2.0 + 1.2 * (n - i) / max(n - 1, 1)
@@ -68,7 +73,7 @@ function plot_dispersion(curves; title="Dispersion")
         for (i, c) in enumerate(curves)
             label, k, w = c
             lines!(ax, k, w; color=length(c) ≥ 4 ? c[4] : farbe(label, i),
-                   linestyle=length(c) ≥ 5 ? c[5] : :solid, label=label)
+                   linestyle=length(c) ≥ 5 ? c[5] : linienstil(label), label=label)
         end
         xlims!(ax, 0, π)
         ylims!(ax, 0, nothing)
@@ -96,6 +101,7 @@ function plot_snapshots(runs, ts; ref=nothing, tnorm=1.0, tlabel="t")
                 it = zeitindex(r.hist, t)
                 lines!(ax, r.hist.position, r.hist.displacement[:, it];
                        color=farbe(r.label, i), linewidth=linienbreite(i, length(runs)),
+                       linestyle=linienstil(r.label),
                        label=r.label)
             end
             row < length(ts) && hidexdecorations!(ax; grid=false)
@@ -153,6 +159,7 @@ function plot_probe(runs, xps; ref=nothing, tnorm=1.0, tlabel=L"t")
                 ip = argmin(abs.(r.hist.position .- xp))
                 lines!(ax, r.hist.time ./ tnorm, r.hist.displacement[ip, :];
                        color=farbe(r.label, i), linewidth=linienbreite(i, length(runs)),
+                       linestyle=linienstil(r.label),
                        label=r.label)
             end
             row < length(xps) && hidexdecorations!(ax; grid=false)
@@ -171,7 +178,8 @@ function plot_error(runs, ref; tnorm=1.0, tlabel=L"t")
         ax = Axis(fig[1, 1]; xlabel=tlabel, ylabel=L"\Vert u-u_\mathrm{ref}\Vert / \max\Vert u_\mathrm{ref}\Vert")
         for (i, r) in enumerate(runs)
             lines!(ax, r.hist.time ./ tnorm, fehler(r, ref); color=farbe(r.label, i),
-                   linewidth=linienbreite(i, length(runs)), label=r.label)
+                   linewidth=linienbreite(i, length(runs)), linestyle=linienstil(r.label),
+                   label=r.label)
         end
         ylims!(ax, 0, nothing)
         axislegend(ax; position=:lt)
@@ -218,7 +226,8 @@ function plot_study(daten; xlabel, ylabel=L"\max_t\, e(t)", xscale=log10, yscale
         for (i, d) in enumerate(daten)
             label, xs, es = d
             scatterlines!(ax, xs, es; color=length(d) ≥ 4 ? d[4] : farbe(label, i),
-                          linestyle=length(d) ≥ 5 ? d[5] : :solid, markersize=9, label=label)
+                          linestyle=length(d) ≥ 5 ? d[5] : linienstil(label), markersize=9,
+                          label=label)
         end
         axislegend(ax; position=legendpos)
         fig

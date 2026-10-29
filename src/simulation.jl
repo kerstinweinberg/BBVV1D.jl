@@ -111,19 +111,47 @@ struct CCMaterial <: AbstractMaterial{NoCorrection}
     end
 end
 
+"""
+    CCFMaterial()
+
+Gemittelter Deformationsgradient mit vorzeichenbehaftetem ξ = X_j - X_i (Notizen
+mmm_peri1DstabCC.tex): barepsilon_i = (1/K_i) Σ Δu ξ V_j mit K_i = Σ ξ² V_j,
+b_i = E Σ (barepsilon_i/K_i + barepsilon_j/K_j) ξ V_j. Exakt der Gradient von
+W = Σ ½E barepsilon² V, impulserhaltend und auch am Rand linear konsistent.
+Entspricht OSB mit α = 0 und ω = 1, hat daher Nullenergiemoden (Zickzack).
+"""
+struct CCFMaterial <: AbstractMaterial{NoCorrection} end
+
+"""
+    BAQPMaterial(; kernel=const_one_kernel)
+
+CC mit Reproducing Kernel und bindungsbezogener Integration (bond-associated quadrature
+points), wie `RKCMaterial` in Peridynamics.jl. Im Stab fällt der gemittelte Gradient
+heraus, die Bindungsdehnung ist ε_ij = (l - L)/L, und mit w_i = Σ ω V_j folgt
+b_i = E Σ ω (1/w_i + 1/w_j) ε_ij/L V_j sign(ξ) (BB mit α = 2, ohne Nullenergiemoden).
+Default-Kernel wie in Peridynamics.jl: ω = 1.
+"""
+struct BAQPMaterial{K} <: AbstractMaterial{NoCorrection}
+    kernel::K
+end
+BAQPMaterial(; kernel::K=const_one_kernel) where {K} = BAQPMaterial{K}(kernel)
+
 correction_type(::AbstractMaterial{C}) where {C} = C
 
 """
     default_material(model::Symbol)
 
 Kurzform für Skripte: `:BB` → BB mit Energiekorrektur, `:CC` → CC diskret kalibriert,
-`:OSB` (oder `:SB`) → OSB mit linearem Kernel.
+`:CCF` → CC mit gemitteltem Deformationsgradienten, `:BAQP` → CC mit bindungsbezogener
+Integration, `:OSB` (oder `:SB`) → OSB mit linearem Kernel.
 """
 function default_material(model::Symbol)
     model === :BB && return BBMaterial{EnergySurfaceCorrection}()
+    model === :BAQP && return BAQPMaterial()
     model === :CC && return CCMaterial(; calibration=:discrete)
+    model === :CCF && return CCFMaterial()
     model in (:OSB, :SB) && return OSBMaterial()
-    throw(ArgumentError("unknown model $model, use :BB, :CC or :OSB"))
+    throw(ArgumentError("unknown model $model, use :BB, :CC, :CCF, :BAQP or :OSB"))
 end
 
 #-- Bonds und System ----------------------------------------------------------------------
@@ -180,7 +208,8 @@ end
 #-- Storage -------------------------------------------------------------------------------
 
 """
-Zustandsgrößen; `barepsilon` und `ccconst` werden nur vom CC-Modell verwendet.
+Zustandsgrößen; `barepsilon` wird nur von CC und CCF verwendet, `ccconst` nur von CC,
+`shape_tensor` (K_i = Σ ξ² V_j) nur von CCF, `kernel_integral` (w_i = Σ ω V_j) nur von BAQP.
 """
 struct Storage
     position::Vector{Float64}
@@ -192,13 +221,17 @@ struct Storage
     strain_energy_density::Vector{Float64}
     barepsilon::Vector{Float64}
     ccconst::Float64
+    shape_tensor::Vector{Float64}
+    kernel_integral::Vector{Float64}
 end
 
 function Storage(system::BondSystem, mat::AbstractMaterial, params::MaterialParameters)
     n = length(system.position)
     cc = mat isa CCMaterial ? calc_ccconst(system, mat, params) : NaN
+    K = mat isa CCFMaterial ? calc_shape_tensor(system) : Float64[]
+    w = mat isa BAQPMaterial ? calc_kernel_integral(system, mat, params) : Float64[]
     return Storage(copy(system.position), zeros(n), zeros(n), zeros(n), zeros(n), zeros(n),
-                   zeros(n), zeros(n), cc)
+                   zeros(n), zeros(n), cc, K, w)
 end
 
 #-- Kraftdichten --------------------------------------------------------------------------
@@ -323,6 +356,81 @@ function calc_ccconst(system::BondSystem, mat::CCMaterial, params::MaterialParam
     return 1 / sqrt(q * M3)
 end
 
+# CCF: wie CC zuerst barepsilon für alle Punkte, aber mit ξ = X_j - X_i und 1/K_i
+function calc_force_density!(storage::Storage, system::BondSystem, mat::CCFMaterial,
+                             params::MaterialParameters)
+    (; displacement, barepsilon, shape_tensor) = storage
+    (; position, bonds, volume) = system
+    for i in each_point_idx(system)
+        barepsilon[i] = 0.0
+        for bond_id in each_bond_idx(system, i)
+            j = bonds[bond_id].neighbor
+            barepsilon[i] += (displacement[j] - displacement[i]) * (position[j] - position[i]) *
+                             volume[j]
+        end
+        barepsilon[i] /= shape_tensor[i]
+    end
+    storage.b_int .= 0
+    for i in each_point_idx(system)
+        force_density_point!(storage, system, mat, params, i)
+    end
+    return nothing
+end
+
+function force_density_point!(storage::Storage, system::BondSystem, ::CCFMaterial,
+                              params::MaterialParameters, i)
+    (; barepsilon, shape_tensor, b_int) = storage
+    (; position, bonds, volume) = system
+    for bond_id in each_bond_idx(system, i)
+        j = bonds[bond_id].neighbor
+        tij = barepsilon[i] / shape_tensor[i] + barepsilon[j] / shape_tensor[j]
+        b_int[i] += params.E * tij * (position[j] - position[i]) * volume[j]
+    end
+    return nothing
+end
+
+# K_i = Σ ξ² V_j (1D-Formtensor), am Rand kleiner als im Inneren
+function calc_shape_tensor(system::BondSystem)
+    K = zeros(length(system.position))
+    for i in each_point_idx(system)
+        for bond_id in each_bond_idx(system, i)
+            bond = system.bonds[bond_id]
+            K[i] += bond.length^2 * system.volume[bond.neighbor]
+        end
+    end
+    return K
+end
+
+# BAQP: ε_ij = (l - L)/L wie bei BB, Bondfaktor ω (1/w_i + 1/w_j)/L statt bc
+function force_density_point!(storage::Storage, system::BondSystem, mat::BAQPMaterial,
+                              params::MaterialParameters, i)
+    (; position, kernel_integral, b_int) = storage
+    (; bonds, volume) = system
+    for bond_id in each_bond_idx(system, i)
+        bond = bonds[bond_id]
+        j, L = bond.neighbor, bond.length
+        Δxij = position[j] - position[i]
+        l = abs(Δxij)
+        ε = (l - L) / L
+        ω = mat.kernel(params.δ, L) * (1 / kernel_integral[i] + 1 / kernel_integral[j])
+        b_int[i] += params.E * ω * ε / L * volume[j] * Δxij / l
+    end
+    return nothing
+end
+
+# w_i = Σ ω V_j (Kernelintegral), am Rand kleiner als im Inneren
+function calc_kernel_integral(system::BondSystem, mat::BAQPMaterial,
+                              params::MaterialParameters)
+    w = zeros(length(system.position))
+    for i in each_point_idx(system)
+        for bond_id in each_bond_idx(system, i)
+            bond = system.bonds[bond_id]
+            w[i] += mat.kernel(params.δ, bond.length) * system.volume[bond.neighbor]
+        end
+    end
+    return w
+end
+
 #-- Verzerrungsenergiedichte (für die Oberflächenkorrektur) -------------------------------
 
 function strain_energy_density_point!(storage::Storage, system::BondSystem, ::BBMaterial,
@@ -410,7 +518,8 @@ MAIN FUNCTION
 
     simulation(pc, params, mat, bcs; n_timesteps=0, totaltime=-1.0, ...)
 
-`mat` ist `BBMaterial`, `CCMaterial` oder `OSBMaterial` (siehe auch `default_material`).
+`mat` ist `BBMaterial`, `CCMaterial`, `CCFMaterial`, `BAQPMaterial` oder `OSBMaterial`
+(siehe auch `default_material`).
 Entweder `n_timesteps` oder `totaltime` angeben, nicht beides.
 
 - `Δt > 0` gibt den Zeitschritt fest vor (z. B. gleich für alle Modelle), sonst wie in

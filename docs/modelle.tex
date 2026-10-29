@@ -25,24 +25,82 @@ Punkte $X_i$ mit Volumen $V_j=\Delta x$, Horizont $\delta$ (hier $\delta = 3.015
   e_{ij} = l_{ij} - L_{ij},\qquad \varepsilon_{ij} = e_{ij}/L_{ij}.
 \]
 Kernel (Influence-Funktion) $\omega(L)$: konstant $1$, linear $\delta/L$ (Standard wie in Peridynamics.jl)
-oder kubischer B-Spline. Momente der Bondlängen pro Punkt:
+oder kubischer B-Spline.
+
+\subsection*{Momente der Bondlängen pro Punkt}
+Für jeden Punkt $i$ wird über seine Nachbarschaft summiert:
 \[
   M_{n,i} = \sum_{j\in\mathcal H_i} L_{ij}^n\,V_j,\qquad q_i = M_{1,i},\qquad
-  m_i = \sum_{j} \omega_{ij} L_{ij}^2\,V_j .
+  M^\omega_{n,i} = \sum_{j\in\mathcal H_i} \omega_{ij}\,L_{ij}^n\,V_j,\qquad m_i = M^\omega_{2,i} .
 \]
-Im Inneren gilt bei $\delta = 3.015\,\Delta x$:
+$M_{n,i}$ ist das $n$-te Moment der Bondlängen, gewichtet mit dem Volumen der Nachbarn. Es hat die Einheit
+$\mathrm{m}^{n+1}$. Die Momente hängen nur von der Referenzkonfiguration ab und werden einmal zu Beginn berechnet.
+$q$ (BB), $m$ (OSB, Peridynamics.jl: \emph{weighted volume}) und $M_3$ (CC) sind die Größen, die in den Modellen tatsächlich vorkommen.
+
+\paragraph{Warum die Momente die Kalibrierung bestimmen.} Setzt man ein glattes Verschiebungsfeld ein,
+\[
+  u_j - u_i = u'\,\xi_{ij} + \tfrac12 u''\,\xi_{ij}^2 + \tfrac16 u'''\,\xi_{ij}^3 + \tfrac1{24}u''''\,\xi_{ij}^4 + \dots,
+\]
+so fallen im Inneren alle ungeraden Summen $\sum_j \xi_{ij}^{2k+1} V_j$ wegen der Symmetrie der Nachbarschaft weg. Übrig bleiben Summen
+über gerade Potenzen bzw.\ über $|\xi|$, also die Momente. Beim BB-Modell z.\,B.\ ist linearisiert
+$\varepsilon_{ij}\,(x_j-x_i)/l_{ij} \approx (u_j-u_i)/L_{ij}$ und damit
+\[
+  b_i = \kappa\sum_j \frac{u_j-u_i}{L_{ij}}\,V_j
+      = \kappa\,\tfrac12 u''\sum_j L_{ij} V_j + \dots = \tfrac12\kappa\,q\,u'' + \dots ,
+\]
+und $b = E\,u''$ verlangt $\kappa = 2E/q$. Ebenso ergibt $\theta = u'$ bei OSB die Normierung mit $m$, und bei CC
+tritt $q\,M_3$ auf. Die nächsthöheren Momente ($M_3/q$ bei BB, $M^\omega_4/M^\omega_2$ bei OSB, $M_5/M_3$ bei CC)
+bestimmen den Dispersionsfehler, siehe unten.
+
+\paragraph{Diskret gegen Kontinuum (Tabelle).} Im Kontinuum ist die Summe ein Integral über den Horizont,
+\[
+  M_n^{\mathrm{kont}} = \int_{-\delta}^{\delta}|\xi|^n\,d\xi = \frac{2\,\delta^{n+1}}{n+1} .
+\]
+Im Diskreten liegen bei $\delta = 3.015\,\Delta x$ links und rechts je drei Nachbarn im Abstand $\Delta x$, $2\Delta x$ und $3\Delta x$,
+jeweils mit dem vollen Volumen $V_j = \Delta x$:
+\[
+  M_n^{\mathrm{diskr}} = 2\,(1 + 2^n + 3^n)\,\Delta x^{n+1} .
+\]
+Die Tabelle stellt beide Werte für einen Punkt im Inneren gegenüber:
 
 \begin{center}
-\begin{tabular}{@{}lll@{}}
+\begin{tabular}{@{}llllc@{}}
   \toprule
-  & diskret & Kontinuum \\
+  & gebraucht in & diskret & Kontinuum & diskret/Kontinuum \\
   \midrule
-  $q$   & $12\,\Delta x^2$ & $\delta^2 \approx 9.09\,\Delta x^2$ \\
-  $M_2$ & $28\,\Delta x^3$ & $2\delta^3/3 \approx 18.3\,\Delta x^3$ \\
-  $M_3$ & $72\,\Delta x^4$ & $\delta^4/2 \approx 41.3\,\Delta x^4$ \\
+  $q = M_1$ & BB, CC           & $12\,\Delta x^2$  & $\delta^2 \approx 9.09\,\Delta x^2$      & $1.32$ \\
+  $M_2$     & OSB (konst.)     & $28\,\Delta x^3$  & $2\delta^3/3 \approx 18.3\,\Delta x^3$   & $1.53$ \\
+  $M_3$     & CC, $\beta_{\mathrm{BB}}$ & $72\,\Delta x^4$  & $\delta^4/2 \approx 41.3\,\Delta x^4$    & $1.74$ \\
+  $M_5$     & $\beta_{\mathrm{CC}}$     & $552\,\Delta x^6$ & $\delta^6/3 \approx 250\,\Delta x^6$     & $2.21$ \\
   \bottomrule
 \end{tabular}
 \end{center}
+
+Die diskreten Momente sind deutlich größer, und zwar umso mehr, je höher $n$ ist. Der Grund ist der äußerste Nachbar bei
+$3\Delta x$: Er zählt mit seinem vollen Volumen, das von $2.5\,\Delta x$ bis $3.5\,\Delta x$ reicht und damit zur Hälfte außerhalb des
+Horizonts liegt, und er geht mit dem größten Gewicht $L^n$ ein. Eine Volumenkorrektur für teilweise im Horizont liegende
+Nachbarn gibt es hier (wie in Peridynamics.jl) nicht.
+
+\paragraph{Folgen.} Mit Kontinuumskonstanten ist das Modell daher falsch kalibriert. Bei BB ist die Steifigkeit um den Faktor
+$q^{\mathrm{diskr}}/q^{\mathrm{kont}} = 1.32$ zu groß, die Welle also um $\sqrt{1.32}-1 \approx 15\,\%$ zu schnell. Bei CC mit
+$c = 3/(2\delta^3)$ ist die Steifigkeit $c^2\,q\,M_3 = 2.59$-mal zu groß ($+61\,\%$). Deshalb werden alle Modelle mit den
+\emph{diskreten} Momenten jedes Punktes kalibriert. Dann trifft im Inneren jedes Modell $c = \sqrt{E/\rho}$ für lange Wellen.
+
+\paragraph{Am Rand.} Dort fehlen Nachbarn auf einer Seite, und die Momente werden kleiner. Für $q$ gilt, nach dem Abstand
+$k\,\Delta x$ vom Stabende:
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+  \toprule
+  Punkt & $k=0$ (Ende) & $k=1$ & $k=2$ & $k\ge3$ (Inneres) \\
+  \midrule
+  $q_i/\Delta x^2$ & $6$ & $7$ & $9$ & $12$ \\
+  \bottomrule
+\end{tabular}
+\end{center}
+Da die Konstanten pro Punkt aus $q_i$ bzw.\ $m_i$ berechnet werden, gleicht die Kalibrierung den Steifigkeitsverlust am Rand
+zum großen Teil aus. Ein Rest bleibt, weil die ungeraden Summen dort nicht verschwinden (siehe \emph{Randeffekt} am Ende).
+Bei BB werden die Werte beider Bondenden gemittelt ($1/q_i + 1/q_j$), damit die Bondkraft antisymmetrisch bleibt und der Impuls
+erhalten ist.
 
 \paragraph{Bondkonstante und Zeitschritt.} $b_c = 2E/\delta^2$ (1D-Gegenstück zu $18K/(\pi\delta^4)$,
 aus $\tfrac12 E\varepsilon^2 = \tfrac14 b_c\varepsilon^2\delta^2$). Für alle Modelle

@@ -7,14 +7,17 @@ import Peridynamics
 """
     stab_3d(mat, label; l, N, npyz=4, E, rho, nu=0.25, vmax, T, tend, freq=5, path)
 
-Rechnet (oder liest, falls `path` schon Ergebnisse enthält) einen Stab der Länge `l` mit
-`N` Punkten in x-Richtung und `npyz × npyz` im Querschnitt. Rückgabe wie ein 1D-run:
-`(; label, hist, volume, rho)` mit x ∈ (0, l).
+Rechnet (oder liest, falls `path` schon Ergebnisse mit denselben Parametern enthält) einen
+Stab der Länge `l` mit `N` Punkten in x-Richtung und `npyz × npyz` im Querschnitt. Rückgabe
+wie ein 1D-run: `(; label, hist, volume, rho)` mit x ∈ (0, l).
 """
 function stab_3d(mat, label; l, N, npyz=4, E, rho, nu=0.25, vmax, T, tend, freq=5, path)
     Δx = l / N
     vtk_path = joinpath(path, "vtk")
-    if !isdir(vtk_path) || isempty(readdir(vtk_path))
+    kennung = string((; mat=typeof(mat), l, N, npyz, E, rho, nu, vmax, T, tend, freq))
+    kennung_datei = joinpath(path, "parameter.txt")
+    gleich = isfile(kennung_datei) && read(kennung_datei, String) == kennung
+    if !gleich || !isdir(vtk_path) || isempty(readdir(vtk_path))
         rm(path; recursive=true, force=true)
         pos, vol = Peridynamics.uniform_box(l, npyz * Δx, npyz * Δx, Δx)
         body = Peridynamics.Body(mat, pos, vol)
@@ -26,6 +29,7 @@ function stab_3d(mat, label; l, N, npyz=4, E, rho, nu=0.25, vmax, T, tend, freq=
         vv = Peridynamics.VelocityVerlet(; time=tend, safety_factor=0.7)
         job = Peridynamics.Job(body, vv; path, freq, fields=(:displacement, :velocity))
         Peridynamics.submit(job; quiet=true)
+        write(kennung_datei, kennung)
     end
     return lese_stab_3d(vtk_path, label; l, Δx, rho)
 end

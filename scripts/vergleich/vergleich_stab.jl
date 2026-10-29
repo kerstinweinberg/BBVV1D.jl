@@ -1,5 +1,7 @@
-# Vergleich BB / CC / OSB im 1D-Stab gegen die d'Alembert-Lösung und gegen 3D-Rechnungen
-# mit Peridynamics.jl (github.com/kaipartmann/Peridynamics.jl)
+# Vergleich BB / CC / CC |ξ| / BAQP / OSB im 1D-Stab gegen die d'Alembert-Lösung und gegen
+# 3D-Rechnungen mit Peridynamics.jl (github.com/kaipartmann/Peridynamics.jl).
+# CC: gemittelter Deformationsgradient (CCFMaterial), CC |ξ|: ältere Variante (CCMaterial),
+# BAQP: CC mit bindungsbezogener Integration (BAQPMaterial).
 #
 #   julia --project=scripts/vergleich -t auto scripts/vergleich/vergleich_stab.jl [ausgabepfad]
 #
@@ -15,11 +17,11 @@ include("referenz_3d.jl")
 OUT::String = length(ARGS) ≥ 1 ? ARGS[1] :
               joinpath(@__DIR__, "..", "..", "results", "vergleich", "stab")
 
-# PMMA, SI-Einheiten
-const E = 3.2e9         # Pa
-const RHO = 1200.0      # kg/m³
+# PMMA wie am Hopkinson-Bar, SI-Einheiten
+const E = 3.0e9         # Pa
+const RHO = 1180.0      # kg/m³
 const C0 = sqrt(E / RHO)
-const LSTAB = 1.0       # m
+const LSTAB = 2.0       # m
 const VMAX = 10.0       # m/s
 const TPULS = 0.1 * LSTAB / C0
 const TEND = 2 * LSTAB / C0
@@ -28,7 +30,9 @@ const TLABEL = L"t\,c/l"
 
 # Standardmodelle: diskret kalibriert bzw. mit Energiekorrektur, OSB mit linearem Kernel
 const MODELLE = ["BB" => BBMaterial{EnergySurfaceCorrection}(),
-                 "CC" => CCMaterial(; calibration=:discrete),
+                 "CC" => CCFMaterial(),
+                 "CC |ξ|" => CCMaterial(; calibration=:discrete),
+                 "BAQP" => BAQPMaterial(),
                  "OSB" => OSBMaterial()]
 
 function setup(N, mfak, α)
@@ -103,7 +107,9 @@ end
 kΔx = range(1e-3, π; length=400)
 k = kΔx ./ Δx0
 disp(m; kw...) = dispersion.(m, k; Δx=Δx0, δ=3.015Δx0, E, kw...)
-speichern(plot_dispersion([("BB", kΔx, disp(:BB)), ("CC", kΔx, disp(:CC)),
+speichern(plot_dispersion([("BB", kΔx, disp(:BB)), ("CC", kΔx, disp(:CCF)),
+                           ("CC |ξ|", kΔx, disp(:CC)),
+                           ("BAQP", kΔx, disp(:BAQP; kernel=const_one_kernel)),
                            ("OSB", kΔx, disp(:OSB))];
                           title=L"\delta = 3.015\,\Delta x,\ \mathrm{OSB\ mit}\ \omega = \delta/L"),
           joinpath(OUT, "01_dispersion"))
@@ -147,13 +153,13 @@ speichern(plot_study([("OSB", ALPHAS, fehler_α["OSB"])]; xlabel=L"\alpha/E",
 ##-- Korrekturen BB / CC und Kernel OSB ----------------------------------------------
 const KORREKTUREN = ["BB ohne Korrektur" => BBMaterial(),
                      "BB Energiekorrektur" => BBMaterial{EnergySurfaceCorrection}(),
-                     "CC Kontinuum" => CCMaterial(),
-                     "CC diskret" => CCMaterial(; calibration=:discrete)]
+                     "CC |ξ| Kontinuum" => CCMaterial(),
+                     "CC |ξ| diskret" => CCMaterial(; calibration=:discrete)]
 fehler_korr = studie(KORREKTUREN, Ns; kwargs_von=N -> (; N))
 stil_korr = Dict("BB ohne Korrektur" => (FARBEN["BB"], :dash),
                  "BB Energiekorrektur" => (FARBEN["BB"], :solid),
-                 "CC Kontinuum" => (FARBEN["CC"], :dash),
-                 "CC diskret" => (FARBEN["CC"], :solid))
+                 "CC |ξ| Kontinuum" => (FARBEN["CC |ξ|"], :dash),
+                 "CC |ξ| diskret" => (FARBEN["CC |ξ|"], :solid))
 speichern(plot_study([(label, LSTAB ./ Ns, fehler_korr[label], stil_korr[label]...)
                       for (label, _) in KORREKTUREN];
                      xlabel=L"\Delta x", title=L"\delta = 3.015\,\Delta x", xticks=dx_ticks,

@@ -32,7 +32,8 @@ end
     dispersion(model, k; Δx, δ, E, α=E, kernel=linear_kernel)
 
 ρω² = Φ(k) im Inneren für die diskret kalibrierten Modelle (BB mit Energiekorrektur, CC
-diskret, OSB mit Kernel ω), Formeln wie in docs/modelle.tex. Rückgabe ω/(c k) = √(Φ/E)/k.
+diskret, CCF, BAQP und OSB mit Kernel ω), Formeln wie in docs/modelle.tex.
+Rückgabe ω/(c k) = √(Φ/E)/k.
 """
 function dispersion(model, k; Δx, δ, E, α=E, kernel=linear_kernel)
     ξ = nachbar_abstaende(Δx, δ)
@@ -46,6 +47,14 @@ function dispersion(model, k; Δx, δ, E, α=E, kernel=linear_kernel)
         Pp = sum((1 .+ cos.(k .* ξ)) .* L) * V
         Pm = sum((1 .- cos.(k .* ξ)) .* L) * V
         Φ = E / (q * M3) * Pp * Pm
+    elseif model === :CCF
+        K = sum(ξ .^ 2) * V
+        S = sum(ξ .* sin.(k .* ξ)) * V
+        Φ = E * S^2 / K^2
+    elseif model === :BAQP
+        ω = kernel.(δ, L)
+        w = sum(ω) * V
+        Φ = 2E / w * sum(ω .* (1 .- cos.(k .* ξ)) ./ ξ .^ 2) * V
     elseif model === :OSB
         ω = kernel.(δ, L)
         m = sum(ω .* ξ .^ 2) * V
