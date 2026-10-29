@@ -1,13 +1,16 @@
 module BBVV1D
 
-using Printf, WriteVTK
+using Printf, WriteVTK, LinearAlgebra, SparseArrays
 
 export PointCloud, MaterialParameters, VelocityBC, simulation, read_vtk
 export BBMaterial, CCMaterial, CCFMaterial, BAQPMaterial, OSBMaterial, default_material
 export NoCorrection, EnergySurfaceCorrection
 export const_one_kernel, linear_kernel, cubic_b_spline_kernel
+export BeamSystem, MittlereKruemmung, BindungsKruemmung, knotenwerte, kruemmung,
+       formaenderungsarbeit, statik, eigenfrequenzen, stabiler_zeitschritt, balken_dynamik
 
 include("simulation.jl")
+include("balken.jl")
 
 include("VtkReader.jl")
 using .VtkReader

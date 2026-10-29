@@ -137,6 +137,57 @@ const CALIBRATED = ["BB energy", "CC discrete", "CCF", "BAQP", "BAQP linear", "O
         end
     end
 
+    @testset "Balken" begin
+        EI, ρA, l, N = 2.0, 0.5, 1.0, 100
+        δ = 3.015 * l / N
+        A = MittlereKruemmung()
+        ARK = MittlereKruemmung(; randkorrektur=true)
+        B = BindungsKruemmung()
+        c = sqrt(EI / ρA)
+        @testset "Starrkörper und Symmetrie: $(nameof(typeof(m))) $i" for (i, m) in
+                                                                         enumerate((ARK, B))
+            s = BeamSystem(l, N, δ, EI, ρA, m; links=:frei, rechts=:frei)
+            x = s.x[s.dofs .+ 1]
+            @test maximum(abs, s.H * ones(length(x))) < 1e-8 * maximum(abs, s.H)
+            @test maximum(abs, s.H * x) < 1e-8 * maximum(abs, s.H)
+            @test s.H ≈ s.H'
+            ω, _ = eigenfrequenzen(s)
+            @test count(<(1e-3 * ω[3]), ω) == 2      # genau zwei Starrkörpermoden
+        end
+        @testset "ohne Randkorrektur: Drehung erzeugt Energie" begin
+            s = BeamSystem(l, N, δ, EI, ρA, A; links=:frei, rechts=:frei)
+            x = s.x[s.dofs .+ 1]
+            @test formaenderungsarbeit(s, x) > 1e-3 * EI
+        end
+        @testset "Kalibrierung κ = w'' (A nur im Inneren)" for m in (A, ARK, B)
+            s = BeamSystem(l, N, δ, EI, ρA, m; links=:frei, rechts=:frei)
+            x = s.x[s.dofs .+ 1]
+            κ = kruemmung(s, x .^ 2 ./ 2)
+            bereich = m === A ? (5:N - 4) : eachindex(κ)
+            @test all(isapprox.(κ[bereich], 1; rtol=1e-10))
+        end
+        @testset "gelenkig: Eigenfrequenzen" for m in (A, ARK, B)
+            s = BeamSystem(l, N, δ, EI, ρA, m; links=:gelenkig, rechts=:gelenkig)
+            ω, _ = eigenfrequenzen(s)
+            @test all(isapprox.(ω[1:3], [(k * π / l)^2 * c for k in 1:3]; rtol=5e-3))
+        end
+        @testset "Kragarm: Endlast und Eigenfrequenz" for m in (ARK, B)
+            s = BeamSystem(l, N, δ, EI, ρA, m)
+            f = zeros(length(s.dofs)); f[end] = 1.0
+            @test knotenwerte(s, statik(s, f))[end] ≈ l^3 / (3EI) rtol = 1e-3
+            ω, _ = eigenfrequenzen(s)
+            @test ω[1] ≈ (1.8751040687 / l)^2 * c rtol = 1e-3
+        end
+        @testset "Dynamik: Energieerhaltung" begin
+            s = BeamSystem(l, N, δ, EI, ρA, B)
+            x = s.x[s.dofs .+ 1]
+            h = balken_dynamik(s; w0=0.01 .* x .^ 2, tend=0.05, n_out=10)
+            e(k) = formaenderungsarbeit(s, h.displacement[s.dofs .+ 1, k]) +
+                   0.5 * sum(s.M .* h.velocity[s.dofs .+ 1, k] .^ 2)
+            @test e(size(h.displacement, 2)) ≈ e(1) rtol = 1e-3
+        end
+    end
+
     @testset "simulation history" begin
         bcs = [VelocityBC(t -> 1.0, [1])]
         h = redirect_stdout(devnull) do

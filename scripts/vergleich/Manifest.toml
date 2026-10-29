@@ -177,7 +177,7 @@ uuid = "39de3d68-74b9-583c-8d2d-e117c070f3a9"
 version = "0.4.8"
 
 [[deps.BBVV1D]]
-deps = ["Base64", "CodecZlib", "LightXML", "Printf", "WriteVTK"]
+deps = ["Base64", "CodecZlib", "LightXML", "LinearAlgebra", "Printf", "SparseArrays", "WriteVTK"]
 path = "../.."
 uuid = "301be7c6-8d1a-4696-95bf-87aa5c26a29f"
 version = "1.0.0-DEV"

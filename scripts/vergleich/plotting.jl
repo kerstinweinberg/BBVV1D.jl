@@ -8,6 +8,8 @@ using CairoMakie
 # feste Reihenfolge der Kategorien (validierte Standardpalette, Slots 1-5, 7 und 8)
 const FARBEN = Dict("BB" => "#2a78d6", "CC" => "#eb6834", "OSB" => "#1baf7a",
                     "CC |ξ|" => "#6250d6", "BAQP" => "#e34948",
+                    # Balken: B wie BB (Mittel der Quadrate), A wie CC, A + RK wie BAQP
+                    "B" => "#2a78d6", "A" => "#eb6834", "A + RK" => "#e34948",
                     "BB-3D" => "#eda100", "OSB-3D" => "#e87ba4")
 const FARBEN_REST = ["#eda100", "#e87ba4", "#008300"]
 const REF_FARBE = "#3d3d3a"
@@ -16,14 +18,14 @@ const REF_LABEL = "analytisch"
 farbe(label, i=1) = get(FARBEN, label, FARBEN_REST[mod1(i, length(FARBEN_REST))])
 
 # OSB fällt im Stab mit BB zusammen (α = E, ω = δ/L) -> gestrichelt, damit BB sichtbar bleibt
-const LINIENSTIL = Dict("OSB" => :dash)
+const LINIENSTIL = Dict("OSB" => :dash, "B" => :dash)   # Balken: B fällt fast mit A + RK zusammen
 linienstil(label) = get(LINIENSTIL, label, :solid)
 
 # frühere Kurven breiter, damit nahezu deckungsgleiche Modelle sichtbar bleiben
 linienbreite(i, n) = 2.0 + 1.2 * (n - i) / max(n - 1, 1)
 
 # lesbare Achsenwerte für log-Skalen
-const LOG_TICKS = [0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0]
+const LOG_TICKS = [v * 10.0^e for e in -6:-1 for v in (1, 2, 5)]; push!(LOG_TICKS, 1.0)
 log_ticks(vmin, vmax) = filter(v -> vmin / 1.5 ≤ v ≤ vmax * 1.5, LOG_TICKS)
 
 const THEMA = merge(theme_latexfonts(),
@@ -63,10 +65,10 @@ end
 # --- Diagramme ------------------------------------------------------------------
 
 "Dispersion: curves = [(label, kΔx, ω/(ck)), ...] oder mit Farbe als 4. Eintrag"
-function plot_dispersion(curves; title="Dispersion")
+function plot_dispersion(curves; title="Dispersion", ylabel=L"\omega / (c\,k)")
     with_theme(THEMA) do
         fig = Figure(size=(620, 340))
-        ax = Axis(fig[1, 1]; xlabel=L"k\,\Delta x", ylabel=L"\omega / (c\,k)", title,
+        ax = Axis(fig[1, 1]; xlabel=L"k\,\Delta x", ylabel, title,
                   xticks=([0, π / 4, π / 2, 3π / 4, π],
                           [L"0", L"\pi/4", L"\pi/2", L"3\pi/4", L"\pi"]))
         hlines!(ax, 1.0; color=REF_FARBE, linestyle=:dash, linewidth=1.5, label="lokal")
@@ -83,12 +85,13 @@ function plot_dispersion(curves; title="Dispersion")
 end
 
 "Momentaufnahmen u(x) zu den Zeiten ts, alle Modelle + Referenz"
-function plot_snapshots(runs, ts; ref=nothing, tnorm=1.0, tlabel="t")
+function plot_snapshots(runs, ts; ref=nothing, tnorm=1.0, tlabel="t",
+                        ylabel=L"u\;[\mathrm{m}]")
     with_theme(THEMA) do
         fig = Figure(size=(620, 170 * length(ts) + 60))
         axs = Axis[]
         for (row, t) in enumerate(ts)
-            ax = Axis(fig[row, 1]; ylabel=L"u\;[\mathrm{m}]",
+            ax = Axis(fig[row, 1]; ylabel,
                       title=string(tlabel, " = ", round(t / tnorm; digits=2)),
                       titlealign=:left, titlesize=11)
             push!(axs, ax)
@@ -141,12 +144,13 @@ function plot_xt(runs; ref=nothing, tnorm=1.0, tlabel=L"t")
 end
 
 "Zeitverlauf u(x_p, t) an Messpunkten xps"
-function plot_probe(runs, xps; ref=nothing, tnorm=1.0, tlabel=L"t")
+function plot_probe(runs, xps; ref=nothing, tnorm=1.0, tlabel=L"t",
+                    ylabel=L"u\;[\mathrm{m}]")
     with_theme(THEMA) do
         fig = Figure(size=(620, 190 * length(xps) + 60))
         axs = Axis[]
         for (row, xp) in enumerate(xps)
-            ax = Axis(fig[row, 1]; ylabel=L"u\;[\mathrm{m}]",
+            ax = Axis(fig[row, 1]; ylabel,
                       title=string("x = ", round(xp; digits=3), " m"),
                       titlealign=:left, titlesize=11)
             push!(axs, ax)
@@ -221,7 +225,13 @@ function plot_study(daten; xlabel, ylabel=L"\max_t\, e(t)", xscale=log10, yscale
     with_theme(THEMA) do
         fig = Figure(size=(520, 340))
         es_alle = reduce(vcat, [d[3] for d in daten])
-        yticks = yscale === log10 ? log_ticks(extrema(es_alle)...) : Makie.automatic
+        yticks = if yscale === log10
+            t = log_ticks(extrema(es_alle)...)
+            (t, [v ≥ 1e-3 ? @sprintf("%g", v) : replace(@sprintf("%.0e", v), "e-0" => "e-")
+                 for v in t])
+        else
+            Makie.automatic
+        end
         ax = Axis(fig[1, 1]; xlabel, ylabel, xscale, yscale, title, xticks, yticks)
         for (i, d) in enumerate(daten)
             label, xs, es = d
