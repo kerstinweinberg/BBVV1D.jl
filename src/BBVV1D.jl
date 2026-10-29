@@ -10,7 +10,8 @@ export BeamSystem, MittlereKruemmung, BindungsKruemmung, knotenwerte, kruemmung,
        formaenderungsarbeit, statik, eigenfrequenzen, stabiler_zeitschritt, balken_dynamik
 export ElasticaSystem, elastica_lagen, elastica_energie, elastica_residuum,
        elastica_gleichgewicht, elastica_gerade, elastica_knickform, elastica_pfad,
-       elastica_massen, elastica_omega_max, elastica_dynamik
+       elastica_massen, elastica_omega_max, elastica_dynamik,
+       kragarm_lagen, kragarm_gradient, elastica_kruemmung, kragarm_bogen, kragarm_dynamik
 
 include("simulation.jl")
 include("balken.jl")

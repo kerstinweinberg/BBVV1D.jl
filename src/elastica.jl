@@ -9,11 +9,13 @@
 # damit ist die Krümmung am Lager null.
 
 """
-    ElasticaSystem(L, N, δ, EI, EA)
+    ElasticaSystem(L, N, δ, EI, EA; rechts_frei=false)
 
-Gerader Stab der Länge `L` mit Knoten X_i = iΔs, i = 0..N, beidseitig gelenkig gelagert:
-y_0 = (0, 0) fest, y_N = (L - Δ, 0) mit vorgegebener Verkürzung Δ (Wegsteuerung).
-Freiheitsgrade: y_1 … y_{N-1}, als Vektor q = [x_1, z_1, x_2, z_2, …].
+Gerader Stab der Länge `L` mit Knoten X_i = iΔs, i = 0..N. Standard: beidseitig gelenkig
+gelagert, y_0 = (0, 0) fest, y_N = (L - Δ, 0) mit vorgegebener Verkürzung Δ (Wegsteuerung),
+Freiheitsgrade y_1 … y_{N-1} als q = [x_1, z_1, x_2, z_2, …] (`elastica_lagen`).
+Mit `rechts_frei = true` ist das rechte Ende frei (keine Geisterknoten), für den Kragarm
+(`kragarm_lagen`, eingespannt bei y_0 in x-Richtung, Freiheitsgrade y_1 … y_N).
 """
 struct ElasticaSystem
     L::Float64
@@ -23,28 +25,35 @@ struct ElasticaSystem
     EI::Float64
     EA::Float64
     nmax::Int
+    nrechts::Int              # Geisterknoten rechts (nmax oder 0 bei freiem Ende)
     volume::Vector{Float64}   # reale Knoten 0..N
     M1::Vector{Float64}       # Σ_j L V_j je realem Knoten (mit Geisterknoten)
+    npaare::Vector{Int}       # vollständige Nachbarpaare je realem Knoten
 end
 
-function ElasticaSystem(L::Real, N::Int, δ::Real, EI::Real, EA::Real)
+function ElasticaSystem(L::Real, N::Int, δ::Real, EI::Real, EA::Real; rechts_frei::Bool=false)
     Δs = L / N
     nmax = floor(Int, δ / Δs + 1e-12)
+    nrechts = rechts_frei ? 0 : nmax
     volume = fill(Δs, N + 1)
     volume[1] = volume[end] = Δs / 2
-    # Geisterknoten haben volles Volumen Δs, deshalb ist M₁ an jedem Knoten vollständig
-    M1 = fill(sum(2n * Δs * Δs for n in 1:nmax), N + 1)
+    # Geisterknoten haben volles Volumen Δs; am freien Ende fehlen Nachbarn
+    M1 = [sum(abs(j - i) * Δs * Δs for j in i-nmax:min(i + nmax, N + nrechts) if j != i)
+          for i in 0:N]
+    npaare = [count(n -> i + n <= N + nrechts, 1:nmax) for i in 0:N]
     return ElasticaSystem(Float64(L), N, Δs, Float64(δ), Float64(EI), Float64(EA), nmax,
-                          volume, M1)
+                          nrechts, volume, M1, npaare)
 end
 
-# Spalte des Knotens i (i = -nmax .. N+nmax) in der vollen Lagematrix Y (2 × (N+1+2nmax))
+# Spalte des Knotens i (i = -nmax .. N+nrechts) in der vollen Lagematrix Y
 @inline spalte(sys::ElasticaSystem, i) = i + sys.nmax + 1
+@inline nspalten(sys::ElasticaSystem) = sys.N + 1 + sys.nmax + sys.nrechts
 
 "volle Lagematrix aus den Freiheitsgraden q und der Verkürzung Δ"
 function elastica_lagen(sys::ElasticaSystem, q::AbstractVector, Δ::Real)
     (; N, nmax) = sys
-    Y = zeros(eltype(q), 2, N + 1 + 2nmax)
+    sys.nrechts == nmax || throw(ArgumentError("elastica_lagen: nur beidseitig gelenkig"))
+    Y = zeros(eltype(q), 2, nspalten(sys))
     Y[:, spalte(sys, 0)] .= 0
     Y[1, spalte(sys, N)] = sys.L - Δ
     for i in 1:N-1
@@ -69,22 +78,24 @@ elastica_energie(sys::ElasticaSystem, Y::AbstractMatrix) =
     elastica_energie!(nothing, sys, Y)
 
 function elastica_energie!(G, sys::ElasticaSystem, Y::AbstractMatrix)
-    (; N, nmax, Δs, EI, EA, volume, M1) = sys
+    (; N, nmax, nrechts, Δs, EI, EA, volume, M1, npaare) = sys
     G === nothing || fill!(G, 0)
     W = 0.0
     for i in 0:N
         ci = spalte(sys, i)
         Vi = volume[i + 1]
-        # Biegung: Paare (i-n, i+n), alle vollständig wegen der Geisterknoten
+        P = npaare[i + 1]
+        # Biegung: vollständige Paare (i-n, i+n); links immer Geister, rechts evtl. frei
         for n in 1:nmax
+            i + n <= N + nrechts || break
             cm, cp = spalte(sys, i - n), spalte(sys, i + n)
             a1, a2 = Y[1, ci] - Y[1, cm], Y[2, ci] - Y[2, cm]
             b1, b2 = Y[1, cp] - Y[1, ci], Y[2, cp] - Y[2, ci]
             φ = winkel(a1, a2, b1, b2)
             h = n * Δs
-            W += Vi * 0.5 * EI / nmax * (φ / h)^2
+            W += Vi * 0.5 * EI / P * (φ / h)^2
             if G !== nothing
-                f = Vi * EI / nmax * φ / h^2           # ∂W/∂φ
+                f = Vi * EI / P * φ / h^2              # ∂W/∂φ
                 aa, bb = a1^2 + a2^2, b1^2 + b2^2
                 # ∂φ/∂b = (-b2, b1)/|b|², ∂φ/∂a = (a2, -a1)/|a|²
                 gb1, gb2 = -b2 / bb, b1 / bb
@@ -95,7 +106,7 @@ function elastica_energie!(G, sys::ElasticaSystem, Y::AbstractMatrix)
             end
         end
         # Dehnung: alle Bindungen im Horizont
-        for j in i-nmax:i+nmax
+        for j in i-nmax:min(i + nmax, N + nrechts)
             j == i && continue
             cj = spalte(sys, j)
             L = abs(j - i) * Δs
@@ -327,6 +338,129 @@ function elastica_dynamik(sys::ElasticaSystem, Δ::Real, ρA::Real; q0::Abstract
         @. a = -r / M - c * v
         @. v += 0.5Δt * a
         step % freq == 0 && speichere!(t)
+    end
+    return aus
+end
+
+#-- Kragarm: eingespannt bei y_0 = (0, 0) in x-Richtung, rechtes Ende frei -----------------
+
+"""
+    kragarm_lagen(sys, q)
+
+Volle Lagematrix für den Kragarm (`ElasticaSystem(...; rechts_frei=true)`), Freiheitsgrade
+y_1 … y_N. Die Einspannung bei y_0 = (0, 0) mit Tangente (1, 0) wird durch Spiegelung an der
+Normalen umgesetzt: y_{-n} = (-x_n, z_n), damit ist die Tangente am Lager fest.
+"""
+function kragarm_lagen(sys::ElasticaSystem, q::AbstractVector)
+    (; N, nmax) = sys
+    sys.nrechts == 0 || throw(ArgumentError("kragarm_lagen: rechts_frei = true nötig"))
+    Y = zeros(eltype(q), 2, nspalten(sys))
+    for i in 1:N
+        Y[1, spalte(sys, i)] = q[2i - 1]
+        Y[2, spalte(sys, i)] = q[2i]
+    end
+    for n in 1:nmax
+        Y[1, spalte(sys, -n)] = -Y[1, spalte(sys, n)]
+        Y[2, spalte(sys, -n)] = Y[2, spalte(sys, n)]
+    end
+    return Y
+end
+
+"Gradient ∂W/∂q des Kragarms (Geisterknoten auf die realen Knoten zurückgeführt)"
+function kragarm_gradient(sys::ElasticaSystem, q::AbstractVector)
+    Y = kragarm_lagen(sys, q)
+    G = similar(Y)
+    elastica_energie!(G, sys, Y)
+    Gr = G[:, spalte(sys, 1):spalte(sys, sys.N)]
+    for n in 1:sys.nmax
+        Gr[1, n] -= G[1, spalte(sys, -n)]
+        Gr[2, n] += G[2, spalte(sys, -n)]
+    end
+    return vec(Gr)
+end
+
+"""
+    elastica_kruemmung(sys, Y) -> κ (reale Knoten 0..N)
+
+Krümmung am Knoten als Mittel der Paarkrümmungen φ_n/(nΔs); Knoten ohne vollständiges Paar
+(freies Ende) erhalten 0.
+"""
+function elastica_kruemmung(sys::ElasticaSystem, Y::AbstractMatrix)
+    (; N, nmax, nrechts, Δs) = sys
+    κ = zeros(N + 1)
+    for i in 0:N
+        P = sys.npaare[i + 1]
+        P == 0 && continue
+        ci = spalte(sys, i)
+        for n in 1:P
+            cm, cp = spalte(sys, i - n), spalte(sys, i + n)
+            φ = winkel(Y[1, ci] - Y[1, cm], Y[2, ci] - Y[2, cm], Y[1, cp] - Y[1, ci],
+                       Y[2, cp] - Y[2, ci])
+            κ[i + 1] += φ / (n * Δs) / P
+        end
+    end
+    return κ
+end
+
+"Kreisbogen mit der Krümmung κ0 ab der Einspannung (Bogenlänge s = iΔs), als Freiheitsgrade"
+function kragarm_bogen(sys::ElasticaSystem, κ0::Real)
+    q = zeros(2sys.N)
+    for i in 1:sys.N
+        s = i * sys.Δs
+        q[2i - 1] = abs(κ0) < 1e-14 ? s : sin(κ0 * s) / κ0
+        q[2i] = abs(κ0) < 1e-14 ? 0.0 : (1 - cos(κ0 * s)) / κ0
+    end
+    return q
+end
+
+"""
+    kragarm_endmoment(sys, q, Mend)
+
+Knotenkräfte eines Moments `Mend` am freien Ende, als Arbeit Mend·θ mit dem Winkel θ der
+letzten Bindung y_N - y_{N-1}: f = Mend ∂θ/∂q.
+"""
+function kragarm_endmoment(sys::ElasticaSystem, q::AbstractVector, Mend::Real)
+    N = sys.N
+    f = zeros(length(q))
+    b1, b2 = q[2N - 1] - q[2N - 3], q[2N] - q[2N - 2]
+    bb = b1^2 + b2^2
+    g1, g2 = -b2 / bb, b1 / bb                      # ∂θ/∂y_N
+    f[2N - 1] = Mend * g1;  f[2N] = Mend * g2
+    f[2N - 3] = -Mend * g1; f[2N - 2] = -Mend * g2
+    return f
+end
+
+"""
+    kragarm_dynamik(sys, ρA; q0, v0=0, tend, Δt, n_out=400, endmoment=t->0)
+
+Velocity-Verlet für den Kragarm mit einem Moment `endmoment(t)` am freien Ende (sonst ohne
+äußere Last). Rückgabe `(; time, q, κ, Ekin, W)` mit der Krümmung κ (reale Knoten) zu jedem
+Ausgabezeitpunkt.
+"""
+function kragarm_dynamik(sys::ElasticaSystem, ρA::Real; q0::AbstractVector, v0=zero(q0),
+                         tend::Real, Δt::Real, n_out::Int=400, endmoment=t -> 0.0)
+    M = repeat(ρA .* sys.volume[2:sys.N+1]; inner=2)
+    n_steps = ceil(Int, tend / Δt)
+    Δt = tend / n_steps
+    freq = max(1, n_steps ÷ n_out)
+    q = copy(q0)
+    v = collect(float.(v0 .+ zero(q0)))
+    kraft(q, t) = (kragarm_endmoment(sys, q, endmoment(t)) .- kragarm_gradient(sys, q)) ./ M
+    a = kraft(q, 0.0)
+    aus = (; time=Float64[], q=Vector{Float64}[], κ=Vector{Float64}[], Ekin=Float64[],
+           W=Float64[])
+    function speichere!(t)
+        Y = kragarm_lagen(sys, q)
+        push!(aus.time, t); push!(aus.q, copy(q)); push!(aus.κ, elastica_kruemmung(sys, Y))
+        push!(aus.Ekin, 0.5 * sum(M .* v .^ 2)); push!(aus.W, elastica_energie(sys, Y))
+    end
+    speichere!(0.0)
+    for step in 1:n_steps
+        @. v += 0.5Δt * a
+        @. q += Δt * v
+        a = kraft(q, step * Δt)
+        @. v += 0.5Δt * a
+        step % freq == 0 && speichere!(step * Δt)
     end
     return aus
 end

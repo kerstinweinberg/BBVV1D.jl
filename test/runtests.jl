@@ -231,6 +231,27 @@ const CALIBRATED = ["BB energy", "CC discrete", "CCF", "BAQP", "BAQP linear", "O
         end
     end
 
+    @testset "Elastica-Kragarm" begin
+        L, N, EI, EA = 0.254, 100, 1.258e-3, 7.3e3
+        sys = ElasticaSystem(L, N, 3.015 * L / N, EI, EA; rechts_frei=true)
+        κ0 = 10.0
+        q0 = kragarm_bogen(sys, κ0)
+        Y = kragarm_lagen(sys, q0)
+        κ = elastica_kruemmung(sys, Y)
+        @test all(isapprox.(κ[1:N-2], κ0; rtol=1e-10))     # Kreisbogen, auch an der Einspannung
+        # Gradient gegen Differenzenquotient
+        g = kragarm_gradient(sys, q0)
+        k, h = 2N - 10, 1e-8
+        e = zeros(2N); e[k] = h
+        W(q) = elastica_energie(sys, kragarm_lagen(sys, q))
+        @test g[k] ≈ (W(q0 .+ e) - W(q0 .- e)) / 2h rtol = 1e-5
+        # Energie nach dem Loslassen erhalten
+        ρA = 1500 * π * 1.66e-3^2 / 4
+        r = kragarm_dynamik(sys, ρA; q0, tend=2e-4, Δt=2e-7, n_out=10)
+        Eg = r.W .+ r.Ekin
+        @test maximum(abs, Eg .- Eg[1]) < 1e-3 * Eg[1]
+    end
+
     @testset "simulation history" begin
         bcs = [VelocityBC(t -> 1.0, [1])]
         h = redirect_stdout(devnull) do
