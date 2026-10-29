@@ -188,6 +188,40 @@ const CALIBRATED = ["BB energy", "CC discrete", "CCF", "BAQP", "BAQP linear", "O
         end
     end
 
+    @testset "Elastica" begin
+        L, N, EI, EA = 0.254, 50, 1.258e-3, 7.3e3
+        sys = ElasticaSystem(L, N, 3.015 * L / N, EI, EA)
+        q = elastica_gerade(sys) .+ 1e-3 .* sin.(1:2(N - 1))
+        Y = elastica_lagen(sys, q, 0.0)
+        @testset "Gradient" begin
+            G = similar(Y)
+            BBVV1D.elastica_energie!(G, sys, Y)
+            k, h = 30, 1e-8
+            Yp = copy(Y); Yp[2, k] += h
+            Ym = copy(Y); Ym[2, k] -= h
+            fd = (elastica_energie(sys, Yp) - elastica_energie(sys, Ym)) / 2h
+            @test G[2, k] ≈ fd rtol = 1e-5
+        end
+        @testset "Dreh- und Translationsinvarianz" begin
+            R = [cos(0.7) -sin(0.7); sin(0.7) cos(0.7)]
+            @test elastica_energie(sys, R * Y .+ [0.1, -0.3]) ≈ elastica_energie(sys, Y) rtol = 1e-12
+        end
+        @testset "kleine Verformungen = lineares Modell B" begin
+            lin = BeamSystem(L, N, 3.015 * L / N, EI, 1.0, BindungsKruemmung();
+                             links=:gelenkig, rechts=:gelenkig)
+            w = 1e-7 .* sin.(π .* (1:N-1) ./ N)
+            q0 = elastica_gerade(sys); q0[2:2:end] .= w
+            @test elastica_energie(sys, elastica_lagen(sys, q0, 0.0)) ≈
+                  formaenderungsarbeit(lin, w) rtol = 1e-6
+        end
+        @testset "Nachknicken: Kraft bei Δ = L/2" begin
+            # exakt (Elastica, Euler-Fall II): Sehne c/L = 1/2 -> p = 0.68118, F/F_cr = 1.34945
+            s = ElasticaSystem(L, 100, 3.015 * L / 100, EI, EA)
+            p = elastica_pfad(s, range(0.01, 0.5; length=30) .* L)
+            @test p[end].F / (π^2 * EI / L^2) ≈ 1.34945 rtol = 5e-3
+        end
+    end
+
     @testset "simulation history" begin
         bcs = [VelocityBC(t -> 1.0, [1])]
         h = redirect_stdout(devnull) do
