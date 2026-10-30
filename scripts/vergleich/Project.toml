@@ -1,5 +1,6 @@
 [deps]
 BBVV1D = "301be7c6-8d1a-4696-95bf-87aa5c26a29f"
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 Peridynamics = "4dc47793-80f3-4232-b30e-ca78ca9d621b"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
