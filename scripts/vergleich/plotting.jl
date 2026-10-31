@@ -8,8 +8,8 @@ using CairoMakie
 # feste Reihenfolge der Kategorien (validierte Standardpalette, Slots 1-5, 7 und 8)
 const FARBEN = Dict("BB" => "#2a78d6", "CC" => "#eb6834", "OSB" => "#1baf7a",
                     "CC |ξ|" => "#6250d6", "BAQP" => "#e34948",
-                    # Balken: B wie BB (Mittel der Quadrate), A wie CC, A + RK wie BAQP
-                    "B" => "#2a78d6", "A" => "#eb6834", "A + RK" => "#e34948",
+                    # Balken: CC wie beim Stab, CC + RK wie BAQP, BP (Bindungspaare) wie BB
+                    "CC + RK" => "#e34948", "BP" => "#2a78d6",
                     "BB-3D" => "#eda100", "OSB-3D" => "#e87ba4")
 const FARBEN_REST = ["#eda100", "#e87ba4", "#008300"]
 const REF_FARBE = "#3d3d3a"
@@ -18,7 +18,7 @@ const REF_LABEL = "analytisch"
 farbe(label, i=1) = get(FARBEN, label, FARBEN_REST[mod1(i, length(FARBEN_REST))])
 
 # OSB fällt im Stab mit BB zusammen (α = E, ω = δ/L) -> gestrichelt, damit BB sichtbar bleibt
-const LINIENSTIL = Dict("OSB" => :dash, "B" => :dash)   # Balken: B fällt fast mit A + RK zusammen
+const LINIENSTIL = Dict("OSB" => :dash, "BP" => :dash)  # Balken: BP fällt fast mit CC + RK zusammen
 linienstil(label) = get(LINIENSTIL, label, :solid)
 
 # frühere Kurven breiter, damit nahezu deckungsgleiche Modelle sichtbar bleiben

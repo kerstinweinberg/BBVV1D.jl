@@ -1,5 +1,5 @@
-# Vergleich der peridynamischen Bernoulli-Balken (A: gemittelte Krümmung, A + RK: mit
-# Reproducing-Kernel-Randkorrektur, B: Mittel der Quadrate der Bindungskrümmung) mit der
+# Vergleich der peridynamischen Bernoulli-Balken (CC: gemittelte Krümmung, CC + RK: mit
+# Reproducing-Kernel-Randkorrektur, BP: Mittel der Quadrate der Paarkrümmung) mit der
 # klassischen Balkentheorie: Dispersion, Eigenfrequenzen, Biegelinie, losgelassener Kragarm.
 #
 #   julia --project=scripts/vergleich scripts/vergleich/vergleich_balken.jl [ausgabepfad]
@@ -22,8 +22,8 @@ const LBALKEN = 2.0        # m
 const LKRAGARM = 1.0       # m, losgelassener Kragarm
 const MFAK = 3.015
 
-const MODELLE = ["A" => MittlereKruemmung(), "A + RK" => MittlereKruemmung(; randkorrektur=true),
-                 "B" => BindungsKruemmung()]
+const MODELLE = ["CC" => MittlereKruemmung(), "CC + RK" => MittlereKruemmung(; randkorrektur=true),
+                 "BP" => BindungsKruemmung()]
 
 system(m, l, N; mfak=MFAK, kw...) = BeamSystem(l, N, mfak * l / N, EI, RHOA, m; kw...)
 maxfehler(run, ref) = maximum(fehler(run, ref))
@@ -35,8 +35,8 @@ printstyled(@sprintf("PMMA-Balken d = %.0f mm: EI = %.3f N m², ρA = %.4f kg/m,
 kΔx = range(1e-3, π; length=400)
 Δx0 = LBALKEN / 200
 dispB(m) = dispersion_balken.(m, kΔx ./ Δx0; Δx=Δx0, δ=MFAK * Δx0)
-speichern(plot_dispersion([("A, A + RK", kΔx, dispB(:A), FARBEN["A"]),
-                           ("B", kΔx, dispB(:B), FARBEN["B"])];
+speichern(plot_dispersion([("CC, CC + RK", kΔx, dispB(:A), FARBEN["CC"]),
+                           ("BP", kΔx, dispB(:B), FARBEN["BP"])];
                           title=L"\delta = 3.015\,\Delta x", ylabel=L"\omega/(c_B\,k^2)"),
           joinpath(OUT, "01_dispersion"))
 
@@ -119,6 +119,29 @@ for (label, _) in MODELLE
     @printf("  %-7s %s | %s\n", label, join((@sprintf("%.1e", r.kragarm) for r in fs[label]), " "),
             join((@sprintf("%.1e", r.gelenkig) for r in fs[label]), " "))
 end
+
+# Verifikation des CC-Modells gegen die Kontinuumslösung (Yang u. a. 2022) bei festem δ:
+# Geisterknoten und Faltungsoperator sind beim gelenkigen Balken gleichwertig, die Abweichung ist
+# nur der Quadraturfehler der Horizontsumme
+δrs = [0.05, 0.1, 0.2]
+Nys = [50, 100, 200, 400, 800, 1600]
+yang_daten = map(δrs) do δr
+    δ = δr * LBALKEN
+    wref(x) = yang_gelenkig(x; l=LBALKEN, δ, q, EI)
+    e = map(Nys) do N
+        s = BeamSystem(LBALKEN, N, δ * (1 + 1e-9), EI, RHOA, MittlereKruemmung();
+                       links=:gelenkig, rechts=:gelenkig)
+        w = knotenwerte(s, statik(s, q .* s.volume[s.dofs .+ 1]))
+        maximum(abs(w[i + 1] - wref(s.x[i + 1])) for i in 0:N÷10:N) / wref(LBALKEN / 2)
+    end
+    @printf("CC gegen Yang u. a., δ = %.2f l: w(l/2)/w_klass = %.5f, Fehler %s\n", δr,
+            wref(LBALKEN / 2) / gelenkig_ref(LBALKEN / 2), join((@sprintf("%.1e", v) for v in e), " "))
+    (@sprintf("δ = %.2f l", δr), LBALKEN ./ Nys, e)
+end
+speichern(plot_study(yang_daten; xlabel=L"\Delta x", ylabel="relativer Fehler",
+                     xticks=(LBALKEN ./ Nys, ["l/$N" for N in Nys]),
+                     title="CC gegen Kontinuumslösung, gelenkig", legendpos=:rb),
+          joinpath(OUT, "03e_verifikation_yang"))
 
 ##-- Dynamik: losgelassener Kragarm (l = 1 m) ---------------------------------------------
 κ0 = 0.01                                   # 1/m, Endauslenkung κ₀l²/2 = 5 mm

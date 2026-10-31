@@ -1,4 +1,4 @@
-# Peridynamische Elastica (Modell B mit Winkelkrümmung + BB-Dehnung) gegen die exakte Elastica
+# Peridynamische Elastica (BP-Modell mit Winkelkrümmung + BB-Dehnung) gegen die exakte Elastica
 # des gelenkig gelagerten Druckstabes: Last-Verkürzung, Durchbiegung, Gestalt, Konvergenz.
 #
 #   julia --project=scripts/vergleich scripts/vergleich/vergleich_elastica.jl [ausgabepfad]
@@ -44,14 +44,14 @@ fig = with_theme(THEMA) do
     ax1 = Axis(f[1, 1]; xlabel=L"\Delta/L", ylabel=L"F/F_\mathrm{cr}", title="Last-Verkürzung")
     lines!(ax1, [1 - c for c in range(0.9999, -0.5; length=300)], [e.F_Fcr for e in pfad_exakt];
            color=REF_FARBE, linestyle=:dash, linewidth=1.5, label="Elastica exakt")
-    scatter!(ax1, [r.Δ / L for r in pfad], [r.F / FCR for r in pfad]; color=FARBEN["B"],
+    scatter!(ax1, [r.Δ / L for r in pfad], [r.F / FCR for r in pfad]; color=FARBEN["BP"],
              markersize=7, label="PD, N = $N0")
     axislegend(ax1; position=:lt)
     ax2 = Axis(f[1, 2]; xlabel=L"F/F_\mathrm{cr}", ylabel=L"w_\mathrm{max}/L",
                title="Durchbiegung in der Mitte")
     lines!(ax2, [e.F_Fcr for e in pfad_exakt], [e.wmax_L for e in pfad_exakt]; color=REF_FARBE,
            linestyle=:dash, linewidth=1.5, label="Elastica exakt")
-    scatter!(ax2, [r.F / FCR for r in pfad], [wmax(r) / L for r in pfad]; color=FARBEN["B"],
+    scatter!(ax2, [r.F / FCR for r in pfad], [wmax(r) / L for r in pfad]; color=FARBEN["BP"],
              markersize=7, label="PD, N = $N0")
     axislegend(ax2; position=:rb)
     f
@@ -71,7 +71,7 @@ fig = with_theme(THEMA) do
         lines!(ax, xe ./ L, sign(r.Y[2, end ÷ 2]) .* we ./ L; color=REF_FARBE, linestyle=:dash,
                linewidth=1.5, label=i == 1 ? "Elastica exakt" : nothing)
         reale = (sys.nmax + 1):(sys.nmax + 1 + sys.N)
-        scatter!(ax, r.Y[1, reale] ./ L, r.Y[2, reale] ./ L; color=FARBEN["B"], markersize=4,
+        scatter!(ax, r.Y[1, reale] ./ L, r.Y[2, reale] ./ L; color=FARBEN["BP"], markersize=4,
                  label=i == 1 ? "PD, N = $N0" : nothing)
     end
     axislegend(ax; position=:rt)
@@ -99,7 +99,7 @@ for N in Ns
     end
 end
 speichern(plot_study([(@sprintf("Δ/L = %.1f", z), L ./ Ns, fehler_N[z], c)
-                      for (z, c) in zip(ziele, [FARBEN["B"], FARBEN["A"]])];
+                      for (z, c) in zip(ziele, [FARBEN["BP"], FARBEN["CC"]])];
                      xlabel=L"\Delta s", ylabel=L"|F/F_\mathrm{exakt} - 1|",
                      xticks=(L ./ Ns, ["L/$N" for N in Ns]), title="δ = 3.015 Δs",
                      legendpos=:rb),

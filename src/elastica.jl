@@ -1,9 +1,9 @@
 # Peridynamische Elastica: ebener Stab mit großen Verschiebungen und Drehungen.
 #
 # Unbekannt ist die Lage y_i = (x_i, z_i) jedes Knotens. Die Energie hat zwei Anteile:
-#   Biegung (Modell B mit Winkelkrümmung): für jedes Nachbarpaar (i-n, i+n) der Winkel φ
+#   Biegung (BP-Modell mit Winkelkrümmung): für jedes Nachbarpaar (i-n, i+n) der Winkel φ
 #     zwischen den Bindungen a = y_i - y_{i-n} und b = y_{i+n} - y_i, κ_n = φ/(nΔs),
-#     Ψ_i = ½EI ⟨κ_n²⟩ -- exakt drehinvariant, für kleine Verformungen das lineare Modell B;
+#     Ψ_i = ½EI ⟨κ_n²⟩ -- exakt drehinvariant, für kleine Verformungen das lineare BP-Modell;
 #   Dehnung (BB): ε_ij = (|y_j - y_i| - L)/L, Ψ_i = ½EA Σ_j ε² L V_j / M₁ⁱ.
 # W = Σ V_i Ψ_i. Gelenkige Lager über punktgespiegelte Geisterknoten y_{-n} = 2y_0 - y_n,
 # damit ist die Krümmung am Lager null.

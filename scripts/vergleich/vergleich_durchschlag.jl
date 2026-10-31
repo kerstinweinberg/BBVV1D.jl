@@ -147,9 +147,9 @@ fig = with_theme(THEMA) do
     ax = Axis(f[1, 1]; xlabel=L"t/T_1", ylabel=L"E\;[\mathrm{J}]", title="Energie bei Q = 1.5 Qₛ")
     t = r.h.time ./ T1
     lines!(ax, t, r.h.W .+ r.h.Ekin .- r.h.Wext; color=REF_FARBE, label="gesamt")
-    lines!(ax, t, r.h.Ekin; color=FARBEN["B"], linestyle=:dash, linewidth=1.5, label="kinetisch")
-    lines!(ax, t, r.h.W; color=FARBEN["B"], linestyle=:dot, linewidth=1.5, label="Formänderung")
-    lines!(ax, t, -r.h.Wext; color=FARBEN["A"], linewidth=1.5, label="Potential der Last")
+    lines!(ax, t, r.h.Ekin; color=FARBEN["BP"], linestyle=:dash, linewidth=1.5, label="kinetisch")
+    lines!(ax, t, r.h.W; color=FARBEN["BP"], linestyle=:dot, linewidth=1.5, label="Formänderung")
+    lines!(ax, t, -r.h.Wext; color=FARBEN["CC"], linewidth=1.5, label="Potential der Last")
     Legend(f[1, 2], ax)
     f
 end

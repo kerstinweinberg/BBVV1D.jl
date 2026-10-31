@@ -15,7 +15,7 @@ abstract type AbstractBeamModel end
 """
     MittlereKruemmung(; randkorrektur=false)
 
-Gemittelte Krümmung (Modell A, Notizen Kap. 66): κ̄_i = c_i Σ_j (w_j - w_i)/ξ² V_j mit
+Gemittelte Krümmung (CC-Modell, Notizen Kap. 66): κ̄_i = c_i Σ_j (w_j - w_i)/ξ² V_j mit
 c_i = 2/Σ_j V_j, Energie ½EI κ̄². Mit `randkorrektur = true` werden die Gewichte mit einem
 Reproducing Kernel (Basis ξ, ξ², Kernel ξ⁻⁴) so bestimmt, dass κ̄ für lineare und quadratische
 Felder an jedem Punkt exakt ist; im Inneren sind beide Fassungen gleich.
@@ -28,7 +28,7 @@ MittlereKruemmung(; randkorrektur::Bool=false) = MittlereKruemmung(randkorrektur
 """
     BindungsKruemmung()
 
-Mittel der Quadrate (Modell B): für jedes Nachbarpaar (i-n, i+n) im Horizont die Krümmung
+Mittel der Quadrate der Paarkrümmung (BP-Modell, Bindungspaare): für jedes Nachbarpaar (i-n, i+n) im Horizont die Krümmung
 κ_n = (w_{i+n} - 2w_i + w_{i-n})/(nΔx)², Energie ½EI ⟨κ_n²⟩ (gleiche Gewichte, normiert über
 die vorhandenen Paare).
 """
@@ -164,7 +164,7 @@ function knotenwerte(sys::BeamSystem, w::AbstractVector)
     return v
 end
 
-"Krümmung des Modells an den Krümmungsstellen (Modell A: an den Knoten)"
+"Krümmung des Modells an den Krümmungsstellen (CC: an den Knoten)"
 kruemmung(sys::BeamSystem, w::AbstractVector) = sys.G * (sys.P * w)
 
 "Formänderungsarbeit W = ½ wᵀ H w"

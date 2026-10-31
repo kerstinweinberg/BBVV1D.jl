@@ -206,7 +206,7 @@ const CALIBRATED = ["BB energy", "CC discrete", "CCF", "BAQP", "BAQP linear", "O
             R = [cos(0.7) -sin(0.7); sin(0.7) cos(0.7)]
             @test elastica_energie(sys, R * Y .+ [0.1, -0.3]) ≈ elastica_energie(sys, Y) rtol = 1e-12
         end
-        @testset "kleine Verformungen = lineares Modell B" begin
+        @testset "kleine Verformungen = lineares BP-Modell" begin
             lin = BeamSystem(L, N, 3.015 * L / N, EI, 1.0, BindungsKruemmung();
                              links=:gelenkig, rechts=:gelenkig)
             w = 1e-7 .* sin.(π .* (1:N-1) ./ N)
