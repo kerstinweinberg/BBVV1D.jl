@@ -1,15 +1,19 @@
 name = "BBVV1D"
 uuid = "301be7c6-8d1a-4696-95bf-87aa5c26a29f"
-authors = ["Kai Partmann <kai.partmann@gmail.com> and contributors"]
 version = "1.0.0-DEV"
+authors = ["Kai Partmann <kai.partmann@gmail.com> and contributors"]
 
 [deps]
 Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
 CodecZlib = "944b1d66-785c-5afd-91f1-9de20f533193"
 LightXML = "9c8b4983-aa76-5018-a973-4c85ecc9e179"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 WriteVTK = "64499a7a-5c06-52f2-abe2-ccb03c286192"
 
 [compat]
+LinearAlgebra = "1.12.0"
+SparseArrays = "1.12.0"
 WriteVTK = "1.18"
 julia = "1.7"
